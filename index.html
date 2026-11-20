@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMIRIM - ส่งซ่อมมือถือ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    // โทนสี: น้ำเงินสว่าง-ขาว (ปรับพาเลตต์ gray ให้เป็นน้ำเงินอมเทา และ blue/indigo ให้สว่างขึ้น)
+    tailwind.config = { theme: { extend: { colors: {
+        gray: { 50: '#f3f8ff', 100: '#e8f1ff', 200: '#d3e3fa', 300: '#b4cdef', 400: '#7f9fca', 500: '#56769f', 600: '#3f5d86', 700: '#2c4a78', 800: '#1c3560', 900: '#0f2347' },
+        blue: { 50: '#eef6ff', 100: '#dbeafe', 500: '#3b8bff', 600: '#1f6fe5', 700: '#1558c0' },
+        indigo: { 50: '#eef6ff', 100: '#dbeafe', 500: '#3b8bff', 600: '#1f6fe5', 700: '#1558c0' }
+    } } } };
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Prompt', sans-serif; background: linear-gradient(180deg, #e3f0ff 0%, #f5faff 55%, #ffffff 100%) fixed; min-height: 100vh; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body, .bg-gray-100 { background-color: white !important; }
+            .shadow-lg { box-shadow: none !important; border: 1px solid #ccc; }
+        }
+        .print-only { display: none; }
+        /* เอกสารพิมพ์ (ใบแจ้งซ่อม / ใบเสร็จรับเงิน): ซ่อนบนหน้าจอ แสดงเฉพาะตอนพิมพ์ */
+        .print-doc { display: none; }
+        @media print {
+            @page { size: A4 portrait; margin: 12mm; }
+            .print-doc { display: block !important; color: #000; font-size: 13px; }
+            .print-doc table { border-collapse: collapse; width: 100%; }
+            .print-doc th, .print-doc td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+            .print-doc .pd-info td { border: none; padding: 2px 0; }
+        }
+
+        /* ===== การเคลื่อนไหว (v1.0.1) ===== */
+        /* สลับหน้า (เข้าสู่ระบบ / หน้าหลัก / ฟอร์ม / ตรวจสอบสถานะ / ใบรับซ่อม) */
+        .page-enter-active, .page-leave-active { transition: opacity .2s ease, transform .2s ease; }
+        .page-enter-from { opacity: 0; transform: translateY(8px); }
+        .page-leave-to { opacity: 0; transform: translateY(-4px); }
+        /* ผลการตรวจสอบสถานะ / รายการเคส */
+        .fade-enter-active, .fade-leave-active { transition: opacity .25s ease, transform .25s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(6px); }
+        /* ป้ายเตือนที่ต้องตัดสินใจ */
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+        .pulse-soft { animation: pulse-soft 1.6s ease-in-out infinite; }
+        /* ปุ่ม */
+        button { transition: background-color .2s ease, transform .12s ease; }
+        button:active { transform: scale(.97); }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen">
+<!-- ================= FRONTEND (CUSTOMER) ================= -->
+        <div v-if="role === 'customer'" class="no-print">
+
+            <!-- แถบชื่อร้าน (ทุกหน้ายกเว้นเข้าสู่ระบบ/สมัคร) -->
+            <div v-if="currentView !== 'login' && currentView !== 'register'" class="pt-5 px-4"><div class="text-center "><div class="text-2xl font-bold tracking-[0.3em] text-blue-600">OMIRIM</div><div class="text-[11px] leading-tight text-gray-500">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div></div></div>
+
+            <!-- หน้าต่างเลือกวิธีส่งเครื่อง (แสดงหลังลูกค้ายืนยันซ่อม) -->
+            <transition name="fade">
+            <div v-if="delivery.show" class="fixed inset-0 z-50 bg-black/40 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+                <div class="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 my-4">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-circle-check text-4xl text-green-600"></i>
+                        <h3 class="text-xl font-bold text-gray-800 mt-2">ยืนยันการซ่อมเรียบร้อย</h3>
+                        <p class="text-sm text-gray-500">เคส {{ track.result ? track.result.id : '' }} · กรุณาเลือกวิธีส่งเครื่องให้ร้าน</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        <button @click="setDelivery('ship')" :class="delivery.method === 'ship' ? 'border-blue-600 bg-blue-50' : 'border-gray-200'" class="border-2 rounded p-3 text-left hover:border-blue-500">
+                            <i class="fas fa-truck-fast text-blue-600 text-xl"></i>
+                            <span class="block font-semibold mt-1">จัดส่งตัวเครื่องมาหน้าร้าน</span>
+                            <span class="block text-xs text-gray-500">ส่งทางไปรษณีย์/ขนส่ง</span>
+                        </button>
+                        <button @click="setDelivery('walkin')" :class="delivery.method === 'walkin' ? 'border-blue-600 bg-blue-50' : 'border-gray-200'" class="border-2 rounded p-3 text-left hover:border-blue-500">
+                            <i class="fas fa-person-walking text-blue-600 text-xl"></i>
+                            <span class="block font-semibold mt-1">นำเครื่องมาหน้าร้านด้วยตัวเอง</span>
+                            <span class="block text-xs text-gray-500">นำเครื่องมาที่ร้านโดยตรง</span>
+                        </button>
+                    </div>
+                    <div v-if="delivery.method" class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded text-sm mb-3">
+                        <p v-if="delivery.method === 'ship'">กรุณาจ่าหน้าพัสดุตามที่อยู่ร้านด้านล่าง และเขียน <b>รหัสเคส {{ track.result ? track.result.id : '' }}</b> ไว้บนกล่องเพื่อให้ร้านตรวจสอบได้</p>
+                        <p v-else>กรุณานำเครื่องมาที่ร้านตามที่อยู่ด้านล่าง และแจ้ง <b>รหัสเคส {{ track.result ? track.result.id : '' }}</b> กับพนักงาน</p>
+                    </div>
+                    <div class="border rounded p-3 mb-3">
+                        <p class="text-xs text-gray-500 mb-1"><i class="fas fa-location-dot text-red-500"></i> ที่อยู่ร้าน</p>
+                        <p class="font-semibold">{{ shop.address }}</p>
+                        <button @click="copyAddress" class="mt-2 text-xs text-blue-600 underline">{{ delivery.copied ? 'คัดลอกแล้ว ✓' : 'คัดลอกที่อยู่' }}</button>
+                    </div>
+                    <a :href="shop.mapUrl" target="_blank" rel="noopener" class="block text-center border border-blue-300 text-blue-600 p-2 rounded hover:bg-blue-50 mb-3"><i class="fas fa-map-location-dot"></i> เปิดแผนที่ร้านใน Google Maps</a>
+                    <button @click="printDoc('repair')" class="w-full mb-2 border-2 border-blue-500 text-blue-600 p-3 rounded font-bold hover:bg-blue-50"><i class="fas fa-print"></i> พิมพ์ใบแจ้งซ่อม</button>
+                    <button @click="delivery.show = false" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700">เสร็จสิ้น</button>
+                </div>
+            </div>
+            </transition>
+            <transition name="page" mode="out-in" appear>
+            <div :key="currentView">
+
+            <!-- เข้าสู่ระบบ -->
+            <div v-if="currentView === 'login'" class="flex items-center justify-center min-h-screen">
+                <div class="bg-white p-8 rounded-lg shadow-lg w-96 text-center">
+                    <div class="text-center mb-5"><div class="text-2xl font-bold tracking-[0.3em] text-blue-600">OMIRIM</div><div class="text-[11px] leading-tight text-gray-500">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div></div>
+                    <h2 class="text-xl font-bold mb-6 text-gray-800">ระบบส่งซ่อมมือถือ</h2>
+                    <input v-model.trim="lf.username" @keyup.enter="login" type="text" placeholder="Username" autocomplete="username" class="w-full p-3 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input v-model="lf.password" @keyup.enter="login" type="password" placeholder="Password" autocomplete="current-password" class="w-full p-3 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button @click="login" :disabled="authBusy" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700 mb-2 disabled:opacity-50">เข้าสู่ระบบ</button>
+                    <p v-if="authError" class="text-red-500 text-sm mt-2">{{ authError }}</p>
+                    <div class="flex justify-between text-sm text-gray-500 mt-4">
+                        <a href="#" @click.prevent="goRegister" class="hover:text-blue-600">สมัครสมาชิก</a>
+                        <a href="#" @click.prevent="authError = 'กรุณาติดต่อร้านเพื่อรีเซ็ตรหัสผ่าน'" class="hover:text-blue-600">ลืมรหัสผ่าน?</a>
+                    </div>
+                    <button @click="guestTrack" class="mt-6 text-sm text-blue-500 underline">ตรวจสอบสถานะเคสที่ส่งซ่อม (ไม่ต้องเข้าสู่ระบบ)</button>
+                </div>
+            </div>
+
+            <!-- สมัครสมาชิก -->
+            <div v-if="currentView === 'register'" class="flex items-center justify-center min-h-screen py-8 px-4">
+                <div class="bg-white p-8 rounded-lg shadow-lg w-96">
+                    <div class="text-center mb-4"><div class="text-2xl font-bold tracking-[0.3em] text-blue-600">OMIRIM</div><div class="text-[11px] leading-tight text-gray-500">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div></div>
+                    <h2 class="text-xl font-bold mb-6 text-gray-800 text-center">สมัครสมาชิก</h2>
+                    <input v-model.trim="rf.name" type="text" placeholder="ชื่อ-นามสกุล" class="w-full p-3 border rounded mb-3">
+                    <input v-model.trim="rf.phone" type="text" placeholder="เบอร์โทรศัพท์มือถือ" class="w-full p-3 border rounded mb-3">
+                    <input v-model.trim="rf.email" type="email" placeholder="Email (ไม่บังคับ)" class="w-full p-3 border rounded mb-3">
+                    <input v-model.trim="rf.username" type="text" placeholder="Username (อย่างน้อย 3 ตัวอักษร)" autocomplete="username" class="w-full p-3 border rounded mb-3">
+                    <input v-model="rf.password" type="password" placeholder="Password (อย่างน้อย 6 ตัวอักษร)" autocomplete="new-password" class="w-full p-3 border rounded mb-3">
+                    <input v-model="rf.confirm" @keyup.enter="register" type="password" placeholder="ยืนยัน Password" autocomplete="new-password" class="w-full p-3 border rounded mb-4">
+                    <button @click="register" :disabled="authBusy" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700 disabled:opacity-50">สมัครและเข้าสู่ระบบ</button>
+                    <p v-if="authError" class="text-red-500 text-sm mt-3">{{ authError }}</p>
+                    <button @click="currentView = 'login'; authError = ''" class="mt-5 w-full text-sm text-gray-500 underline">กลับไปหน้าเข้าสู่ระบบ</button>
+                </div>
+            </div>
+
+            <!-- หน้าหลัก: สถานะเคสของผู้ใช้ + เพิ่มเคสใหม่ -->
+            <div v-if="currentView === 'home' && user" class="max-w-4xl mx-auto py-8 px-4">
+                <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <div>
+                            <p class="text-sm text-gray-500">ยินดีต้อนรับ</p>
+                            <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-user-circle text-blue-600"></i> {{ user.name || user.username }}</h2>
+                            <p class="text-xs text-gray-500">@{{ user.username }}<span v-if="user.phone"> · {{ user.phone }}</span></p>
+                        </div>
+                        <div class="flex gap-2 flex-wrap">
+                            <button @click="newCase" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700"><i class="fas fa-plus"></i> เพิ่มเคสใหม่</button>
+                            <button @click="logout" class="border border-red-300 text-red-500 px-4 py-2 rounded hover:bg-red-50">ออกจากระบบ</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- แจ้งเตือนข้อเสนอราคา -->
+                <transition name="fade">
+                <div v-if="pendingCount" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6 text-sm text-yellow-800">
+                    <i class="fas fa-bell pulse-soft"></i> คุณมี <b>{{ pendingCount }}</b> เคสที่ร้านเสนอราคามาแล้ว รอคุณตัดสินใจ (ซ่อม / ไม่ซ่อม)
+                </div>
+                </transition>
+
+                <!-- สรุปสถานะ (กดเพื่อกรอง) -->
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+                    <button @click="mineFilter = ''" :class="mineFilter === '' ? 'ring-2 ring-blue-500' : ''" class="bg-white rounded shadow p-4 text-left border-l-4 border-blue-500">
+                        <p class="text-xs text-gray-500">เคสทั้งหมด</p><p class="text-2xl font-bold">{{ mine.length }}</p>
+                    </button>
+                    <button v-for="s in statusSummary" :key="s.key" @click="mineFilter = s.key" :class="[s.border, mineFilter === s.key ? 'ring-2 ring-blue-500' : '']" class="bg-white rounded shadow p-4 text-left border-l-4">
+                        <p class="text-xs text-gray-500">{{ s.key }}</p><p class="text-2xl font-bold">{{ s.count }}</p>
+                    </button>
+                </div>
+
+                <!-- รายการเคส -->
+                <h3 class="font-bold text-gray-800 mb-3">เคสของฉัน <span v-if="mineFilter" class="text-sm font-normal text-gray-500">· กรอง: {{ mineFilter }}</span></h3>
+                <transition-group name="fade" tag="div" class="space-y-3">
+                    <div v-for="c in mineFiltered" :key="c.id" :class="statusBorder(c.status)" class="bg-white rounded-lg shadow p-4 border-l-4 flex justify-between items-center gap-3 flex-wrap">
+                        <div class="min-w-0">
+                            <p class="font-bold text-gray-800">{{ c.id }} <span class="text-xs font-normal text-gray-400 ml-1">{{ c.date }}</span></p>
+                            <p class="text-sm text-gray-600"><i class="fas fa-mobile-alt w-4"></i> {{ c.model }} · <span class="text-red-500">{{ c.problem }}</span></p>
+                            <div class="flex gap-2 flex-wrap mt-2">
+                                <span v-if="needsDecision(c)" class="pulse-soft text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full"><i class="fas fa-tags"></i> ร้านเสนอราคาแล้ว รอตัดสินใจ</span>
+                                <span v-else-if="c.decision === 'accept'" class="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full"><i class="fas fa-check-circle"></i> เลือกซ่อม: {{ chosenLabel(c) }}</span>
+                                <span v-else-if="c.decision === 'decline'" class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full"><i class="fas fa-times-circle"></i> เลือกไม่ซ่อม</span>
+                                <span v-if="pendingAddons(c)" class="pulse-soft text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full"><i class="fas fa-screwdriver-wrench"></i> ร้านเสนองานซ่อมเพิ่ม รอตัดสินใจ</span>
+                                <span v-if="c.received_at" class="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full"><i class="fas fa-box-open"></i> ร้านรับเครื่องแล้ว</span>
+                                <span v-if="lastFrom(c) === 'admin'" class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full"><i class="fas fa-comment-dots"></i> มีข้อความจากร้าน</span>
+                                <span v-else-if="lastFrom(c) === 'customer'" class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"><i class="fas fa-paper-plane"></i> ส่งข้อความแล้ว รอร้านตอบ</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span :class="badge(c.status)" class="px-3 py-1 rounded-full text-xs whitespace-nowrap">{{ c.status }}</span>
+                            <button @click="openCase(c)" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">ดูรายละเอียด</button>
+                        </div>
+                    </div>
+                </transition-group>
+                <div v-if="!mineFiltered.length" class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                    <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
+                    <p v-if="!mine.length">ยังไม่มีเคสส่งซ่อม กด <b>"เพิ่มเคสใหม่"</b> เพื่อส่งเครื่องของคุณ</p>
+                    <p v-else>ไม่มีเคสในสถานะ "{{ mineFilter }}"</p>
+                </div>
+            </div>
+
+            <!-- ฟอร์มส่งซ่อม -->
+            <div v-if="currentView === 'form'" class="max-w-4xl mx-auto py-10 px-4">
+                <div class="bg-white p-8 rounded-lg shadow-lg">
+                    <div class="flex justify-between items-center mb-6 border-b pb-4">
+                        <h2 class="text-2xl font-bold text-gray-800">แบบฟอร์มส่งซ่อมเครื่อง (เคสใหม่)</h2>
+                        <div class="space-x-4"><button @click="toHome" class="text-blue-500 hover:text-blue-700"><i class="fas fa-home"></i> หน้าหลัก</button><button @click="logout" class="text-red-500 hover:text-red-700">ออกจากระบบ</button></div>
+                    </div>
+
+                    <!-- ส่วนที่ 2: ข้อมูลส่วนตัว -->
+                    <h3 class="text-lg font-semibold mb-4 text-blue-600 border-l-4 border-blue-600 pl-2">ส่วนที่ 2: ข้อมูลส่วนตัว</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <input v-model="form.name" type="text" placeholder="ชื่อ-นามสกุล" class="p-3 border rounded">
+                        <input v-model="form.nickname" type="text" placeholder="ชื่อเล่น" class="p-3 border rounded">
+                        <input v-model="form.phone" type="text" placeholder="เบอร์โทรศัพท์มือถือ" class="p-3 border rounded">
+                        <input v-model="form.email" type="email" placeholder="Email" class="p-3 border rounded">
+                        <input v-model="form.screen_password" type="text" placeholder="รหัสผ่านหน้าจอ" class="p-3 border rounded md:col-span-2">
+                    </div>
+
+                    <!-- ส่วนที่ 3: ข้อมูลเครื่องและอาการเสีย -->
+                    <h3 class="text-lg font-semibold mb-4 text-blue-600 border-l-4 border-blue-600 pl-2">ส่วนที่ 3: ข้อมูลอุปกรณ์</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <select v-model="form.model" class="p-3 border rounded">
+                            <option value="">-- เลือกรุ่น (IOS) --</option>
+                            <option v-for="m in iosModels" :value="m">{{ m }}</option>
+                        </select>
+                        <input v-model="form.color" type="text" placeholder="สีตัวเครื่อง" class="p-3 border rounded">
+                        <input v-model="form.model_number" type="text" placeholder="โมเดลตัวเครื่อง (ถ้าทราบ)" class="p-3 border rounded">
+                    </div>
+                    <div class="mb-6">
+                        <select v-model="form.problem" class="w-full p-3 border rounded mb-2">
+                            <option value="">-- เลือกส่วนที่เสียหาย/ปัญหา --</option>
+                            <option value="หน้าจอเสีย">หน้าจอเสีย</option>
+                            <option value="แบตเสียหาย">แบตเสียหาย</option>
+                            <option value="กล้องหลังและกระจกครอบเลนส์">กล้องหลังและกระจกครอบเลนส์</option>
+                            <option value="ระบบสแกนใบหน้า">ระบบสแกนใบหน้า</option>
+                            <option value="กระจกฝาหลัง">กระจกฝาหลัง</option>
+                            <option value="เมนบอร์ดช็อต">เมนบอร์ดช็อต</option>
+                            <option value="เครื่องเปิดไม่ติด">เครื่องเปิดไม่ติด</option>
+                            <option value="อื่นๆ">อื่นๆ</option>
+                        </select>
+                        <textarea v-if="form.problem === 'อื่นๆ' || form.problem" v-model="form.problem_desc" placeholder="อธิบายอาการเพิ่มเติม..." class="w-full p-3 border rounded"></textarea>
+                    </div>
+
+                    <!-- ส่วนที่ 4: รูปภาพ -->
+                    <h3 class="text-lg font-semibold mb-4 text-blue-600 border-l-4 border-blue-600 pl-2">ส่วนที่ 4: แนบรูปภาพตัวเครื่องรอบๆ (จำเป็น 4 รูป)</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        <label v-for="i in 4" :key="i" class="border-2 border-dashed border-gray-300 rounded text-center cursor-pointer hover:bg-gray-50 flex flex-col items-center justify-center h-32 overflow-hidden relative">
+                            <input type="file" accept="image/*" class="hidden" @change="pickPhoto($event, i - 1)">
+                            <img v-if="form.photos[i - 1]" :src="form.photos[i - 1]" class="absolute inset-0 w-full h-full object-cover">
+                            <template v-else><i class="fas fa-camera text-2xl text-gray-400 mb-2"></i><span class="text-sm text-gray-500">อัพโหลดรูปที่ {{ i }}</span></template>
+                        </label>
+                    </div>
+
+                    <button @click="submitForm" :disabled="submitting" class="w-full bg-green-600 text-white p-4 rounded font-bold text-lg hover:bg-green-700 disabled:opacity-50">ยืนยันการส่งซ่อม</button>
+                </div>
+            </div>
+
+            <!-- ตรวจสอบสถานะเคส / รายละเอียดเคส -->
+            <div v-if="currentView === 'track'" class="max-w-md mx-auto py-10 px-4">
+                <div class="bg-white p-8 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">{{ track.fromHome ? 'รายละเอียดเคส' : 'ตรวจสอบสถานะเคส' }}</h2>
+                    <template v-if="!track.fromHome">
+                        <input v-model="track.id" placeholder="รหัสเคส เช่น C-1A2B3C" class="w-full p-3 border rounded mb-3">
+                        <input v-model="track.phone" placeholder="เบอร์โทรที่ใช้ส่งซ่อม" class="w-full p-3 border rounded mb-3">
+                        <button @click="checkTrack" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700">ตรวจสอบ</button>
+                    </template>
+                    <transition name="fade"><p v-if="track.error" class="text-red-500 text-sm mt-3">{{ track.error }}</p></transition>
+                    <transition name="fade">
+                    <div v-if="track.result" :class="track.fromHome ? '' : 'mt-5 border-t pt-4'">
+                        <p class="text-sm text-gray-500">{{ track.result.id }} · {{ track.result.model }}</p>
+                        <p v-if="track.result.problem" class="text-sm text-gray-500">อาการ: {{ track.result.problem }} · วันที่ {{ track.result.date }}</p>
+                        <p class="mt-2">สถานะ: <span :class="badge(track.result.status)" class="px-3 py-1 rounded-full text-xs font-bold">{{ track.result.status }}</span></p>
+                        <p v-if="track.result.received_at" class="mt-2 text-sm text-green-700"><i class="fas fa-box-open"></i> ร้านรับเครื่องแล้ว ({{ track.result.received_at }}) · ผู้รับเครื่อง: {{ track.result.received_by || '-' }}</p>
+                        <!-- ข้อความกับร้าน (ลูกค้าส่งเข้าเคสนี้ได้ ร้านเห็นและตอบกลับในระบบหลังบ้าน) -->
+                        <div class="mt-4">
+                            <h3 class="font-semibold text-gray-700 mb-2"><i class="fas fa-comments text-blue-600"></i> ข้อความกับร้าน</h3>
+                            <chat-thread :msgs="msgsOf(track.result)" me="customer" :send="sendMsg" height="h-56"></chat-thread>
+                        </div>
+
+                        <!-- เสนอราคาจากร้าน -->
+                        <div v-if="track.result.offers && track.result.offers.length" class="mt-4">
+                            <button @click="track.showOffers = !track.showOffers" class="w-full bg-indigo-600 text-white p-3 rounded font-bold hover:bg-indigo-700">
+                                <i class="fas fa-tags"></i> เสนอราคา ({{ track.result.offers.length }} ตัวเลือก)
+                                <span v-if="!track.result.decision && isOpen(track.result)" class="ml-1 text-xs bg-yellow-300 text-yellow-900 px-2 py-0.5 rounded-full">รอการตัดสินใจ</span>
+                                <i :class="track.showOffers ? 'fa-chevron-up' : 'fa-chevron-down'" class="fas ml-2 text-xs"></i>
+                            </button>
+                            <transition name="fade">
+                            <div v-if="track.showOffers" class="mt-3 border rounded p-3">
+                                <p class="text-xs text-gray-500 mb-3">ร้านเสนอเมื่อ {{ track.result.offer_date }} · ร้านเสนออะไหล่ไว้ให้เลือก เลือกว่าจะเปลี่ยนเป็นอะไหล่ชิ้นไหน (ประเภทไหน ราคาเท่าไหร่) แล้วกดยืนยันซ่อม หรือเลือกไม่ซ่อม</p>
+                                <label v-for="o in track.result.offers" :key="o.id" :class="track.pick === o.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'" class="flex items-center gap-3 border-2 rounded p-3 mb-2 cursor-pointer">
+                                    <input type="radio" :value="o.id" v-model="track.pick" :disabled="!isOpen(track.result)">
+                                    <span class="flex-1"><span class="block font-semibold">{{ o.category }} · {{ o.type }}</span><span class="block text-xs text-gray-500">{{ o.model }} · รับประกัน {{ warranty(o.category, o.type) }} วัน</span></span>
+                                    <b class="text-indigo-600 whitespace-nowrap">{{ baht(o.price) }}</b>
+                                </label>
+                                <div v-if="track.result.decision === 'accept'" class="bg-green-50 border-l-4 border-green-500 p-3 rounded text-sm mt-3">
+                                    <i class="fas fa-check-circle text-green-600"></i> คุณเลือก <b>ซ่อม</b> ({{ track.result.decision_date }})
+                                    <button v-if="isOpen(track.result)" @click="openDelivery" class="block mt-2 text-blue-600 underline text-xs"><i class="fas fa-truck-fast"></i> วิธีส่งเครื่อง / ที่อยู่และแผนที่ร้าน</button>
+                                </div>
+                                <div v-else-if="track.result.decision === 'decline'" class="bg-red-50 border-l-4 border-red-500 p-3 rounded text-sm mt-3">
+                                    <i class="fas fa-times-circle text-red-500"></i> คุณเลือก <b>ไม่ซ่อม</b> ({{ track.result.decision_date }})
+                                </div>
+                                <div v-if="isOpen(track.result)" class="flex gap-2 mt-3">
+                                    <button @click="decide('accept')" :disabled="!track.pick || track.busy" class="flex-1 bg-green-600 text-white p-3 rounded font-bold hover:bg-green-700 disabled:opacity-40">{{ track.result.decision === 'accept' ? 'เปลี่ยนเป็นตัวเลือกนี้' : 'ยืนยันซ่อม' }}</button>
+                                    <button @click="decide('decline')" :disabled="track.busy" class="flex-1 bg-red-500 text-white p-3 rounded font-bold hover:bg-red-600 disabled:opacity-40">ไม่ซ่อม</button>
+                                </div>
+                            </div>
+                            </transition>
+                        </div>
+                        <!-- งานซ่อมเพิ่มเติมจากร้าน (ร้านเสนอระหว่างซ่อม) -->
+                        <div v-if="(track.result.addons || []).length" class="mt-4">
+                            <h3 class="font-semibold text-gray-700 mb-1"><i class="fas fa-screwdriver-wrench text-indigo-600"></i> งานซ่อมเพิ่มเติมจากร้าน</h3>
+                            <p class="text-xs text-gray-500 mb-2">ร้านเสนองานเพิ่มระหว่างซ่อม กดรับหรือไม่รับแต่ละรายการได้ · รายการที่รับจะรวมอยู่ในใบเสร็จ</p>
+                            <div v-for="a in track.result.addons" :key="a.id" :class="a.decision === 'accept' ? 'border-green-500 bg-green-50' : (a.decision === 'decline' ? 'border-red-300 bg-red-50' : 'border-indigo-300')" class="border-2 rounded p-3 mb-2">
+                                <div class="flex justify-between items-start gap-2">
+                                    <span class="font-semibold">{{ a.category }} · {{ a.type }}</span>
+                                    <b class="text-indigo-600 whitespace-nowrap">{{ baht(a.price) }}</b>
+                                </div>
+                                <p class="text-xs text-gray-500">รุ่น {{ a.model }} · รับประกัน {{ warranty(a.category, a.type) }} วัน · ร้านเสนอเมื่อ {{ a.offer_date }}</p>
+                                <p v-if="a.decision" class="text-xs mt-1" :class="a.decision === 'accept' ? 'text-green-700' : 'text-red-600'">
+                                    <i :class="a.decision === 'accept' ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i> {{ a.decision === 'accept' ? 'คุณรับงานนี้' : 'คุณไม่รับงานนี้' }} ({{ a.decision_date }})
+                                </p>
+                                <div v-if="isOpen(track.result)" class="flex gap-2 mt-2">
+                                    <button @click="decideAddon(a, 'accept')" :disabled="track.busy || a.decision === 'accept'" class="flex-1 bg-green-600 text-white p-2 rounded text-sm font-bold hover:bg-green-700 disabled:opacity-40">{{ a.decision === 'accept' ? 'รับงานนี้แล้ว' : 'รับงานนี้' }}</button>
+                                    <button @click="decideAddon(a, 'decline')" :disabled="track.busy || a.decision === 'decline'" class="flex-1 bg-red-500 text-white p-2 rounded text-sm font-bold hover:bg-red-600 disabled:opacity-40">{{ a.decision === 'decline' ? 'ไม่รับแล้ว' : 'ไม่รับ' }}</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- สถานะยกเลิก / พิมพ์เอกสาร / ยกเลิกงานซ่อม -->
+                        <div v-if="track.result.status === 'ยกเลิก'" class="mt-4 bg-red-50 border-l-4 border-red-500 p-3 rounded text-sm">
+                            <i class="fas fa-ban text-red-500"></i> งานซ่อมนี้ถูกยกเลิก{{ track.result.cancel_by === 'customer' ? 'โดยคุณ' : 'โดยร้าน' }}<span v-if="track.result.cancel_date"> ({{ track.result.cancel_date }})</span>
+                        </div>
+                        <div v-if="track.result.decision === 'accept' && track.result.status !== 'ยกเลิก'" class="mt-4">
+                            <button @click="printDoc('repair')" class="w-full border-2 border-blue-500 text-blue-600 p-3 rounded font-bold hover:bg-blue-50"><i class="fas fa-print"></i> พิมพ์ใบแจ้งซ่อม</button>
+                        </div>
+                        <div v-if="track.result.status === 'เสร็จสิ้น' && itemsOf(track.result).length" class="mt-3">
+                            <button @click="printDoc('receipt')" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700"><i class="fas fa-receipt"></i> พิมพ์ใบเสร็จรับเงิน</button>
+                        </div>
+                        <button v-if="isOpen(track.result)" @click="cancelCase" :disabled="track.busy" class="w-full mt-4 border-2 border-red-400 text-red-600 p-3 rounded font-bold hover:bg-red-50 disabled:opacity-40"><i class="fas fa-ban"></i> ยกเลิกงานซ่อม</button>
+                    </div>
+                    </transition>
+                    <button @click="backFromTrack" class="mt-6 text-sm text-gray-500 underline">{{ user ? '← กลับหน้าหลัก' : 'กลับ' }}</button>
+                </div>
+            </div>
+
+            <!-- ใบเสร็จ (พิมพ์) -->
+            <div v-if="currentView === 'receipt'" class="max-w-2xl mx-auto py-10 px-4">
+                <div class="bg-white p-8 rounded-lg shadow-lg border">
+                    <div class="text-center mb-6">
+                        <h1 class="text-3xl font-bold mb-2">ใบรับซ่อมเครื่อง</h1>
+                        <p class="text-gray-500">รหัสเคส: {{ lastSubmitted.id }}</p>
+                        <p class="text-gray-500">วันที่: {{ lastSubmitted.date }}</p>
+                    </div>
+                    <div class="mb-6 border-t border-b py-4">
+                        <h3 class="font-bold mb-2">ข้อมูลลูกค้า:</h3>
+                        <p>ชื่อ: {{ lastSubmitted.name }} ({{ lastSubmitted.nickname }})</p>
+                        <p>เบอร์โทร: {{ lastSubmitted.phone }}</p>
+                        <p>Email: {{ lastSubmitted.email }}</p>
+                    </div>
+                    <div class="mb-6">
+                        <h3 class="font-bold mb-2">ข้อมูลอุปกรณ์:</h3>
+                        <p>รุ่น: {{ lastSubmitted.model }} | สี: {{ lastSubmitted.color }}</p>
+                        <p class="text-red-600 font-semibold mt-2">อาการเสีย: {{ lastSubmitted.problem }}</p>
+                        <p class="text-sm text-gray-600">เพิ่มเติม: {{ lastSubmitted.problem_desc }}</p>
+                    </div>
+                    <p class="text-center text-sm text-gray-600 mt-8 no-print"><i class="fas fa-circle-info text-blue-500"></i> เมื่อร้านเสนอราคาและคุณกดยืนยันซ่อมแล้ว พิมพ์ <b>ใบแจ้งซ่อม</b> ได้ที่หน้า "รายละเอียดเคส" · เมื่อซ่อมเสร็จสิ้นพิมพ์ <b>ใบเสร็จรับเงิน</b> ได้ที่หน้าเดิม</p>
+                    <div class="text-center mt-6 no-print flex gap-2 justify-center flex-wrap">
+                        <button @click="openCase(lastSubmitted)" class="bg-blue-500 text-white px-6 py-2 rounded">ตรวจสอบสถานะ</button>
+                        <button @click="toHome" class="bg-gray-500 text-white px-6 py-2 rounded"><i class="fas fa-home"></i> กลับหน้าหลัก</button>
+                        <button @click="newCase" class="border border-blue-500 text-blue-600 px-6 py-2 rounded"><i class="fas fa-plus"></i> เพิ่มเคสอีก</button>
+                    </div>
+                </div>
+            </div>
+            </div>
+            </transition>
+        </div>
+
+        <!-- เอกสารพิมพ์: ใบแจ้งซ่อม / ใบเสร็จรับเงิน (ซ่อนบนหน้าจอ แสดงเฉพาะตอนสั่งพิมพ์) -->
+        <div v-if="printCase" class="print-doc">
+            <div class="text-center border-b-2 border-black pb-2 mb-3">
+                <div class="text-2xl font-bold tracking-[0.3em]">OMIRIM</div>
+                <div class="text-[11px]">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div>
+                <div class="text-[11px]">ที่อยู่ร้าน: {{ shop.address }}</div>
+                <h1 class="text-xl font-bold mt-2">{{ printCase.kind === 'repair' ? 'ใบแจ้งซ่อม' : 'ใบเสร็จรับเงิน (งานซ่อม)' }}</h1>
+            </div>
+            <table class="pd-info mb-3">
+                <tbody>
+                    <tr>
+                        <td><b>รหัสเคส:</b> {{ printCase.c.id }}</td>
+                        <td class="text-right"><b>{{ printCase.kind === 'repair' ? 'วันที่ยืนยันซ่อม:' : 'วันที่ซ่อมเสร็จ:' }}</b> {{ printCase.kind === 'repair' ? (printCase.c.decision_date || '-') : fmtDate(printCase.c.done_at) }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>ชื่อลูกค้า:</b> {{ printCase.c.name || '-' }}</td>
+                        <td class="text-right"><b>เบอร์โทร:</b> {{ printCase.c.phone || '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>รุ่นเครื่อง:</b> {{ printCase.c.model }}</td>
+                        <td class="text-right"><b>สี:</b> {{ printCase.c.color || '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><b>อาการเสีย:</b> {{ printCase.c.problem }}<span v-if="printCase.c.problem_desc"> ({{ printCase.c.problem_desc }})</span></td>
+                    </tr>
+                    <tr v-if="printCase.c.received_at">
+                        <td colspan="2"><b>ร้านรับเครื่องเมื่อ:</b> {{ printCase.c.received_at }} · <b>ผู้รับเครื่อง:</b> {{ printCase.c.received_by || '-' }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            <table>
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width:44px">ลำดับ</th>
+                        <th class="text-left">รายการซ่อม</th>
+                        <th class="text-right" style="width:110px">ราคา (บาท)</th>
+                        <th class="text-left" style="width:210px">การรับประกัน</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(ln, i) in billLines(printCase.c)" :key="ln.key">
+                        <td class="text-center">{{ i + 1 }}</td>
+                        <td v-if="!ln.parts">{{ ln.title }}<span class="block text-[11px]">รุ่น {{ ln.model }}</span></td>
+                        <td v-else>{{ ln.title }}<span v-for="p in ln.parts" :key="p.key" class="block text-[11px]">• {{ p.title }} · รุ่น {{ p.model }} · {{ baht(p.price) }}</span></td>
+                        <td class="text-right">{{ baht(ln.price) }}</td>
+                        <td v-if="!ln.parts">{{ warrantyText(ln.warranty, printCase.kind, printCase.c) }}</td>
+                        <td v-else><span v-for="p in ln.parts" :key="p.key" class="block text-[11px]">{{ p.title }}: {{ warrantyText(p.warranty, printCase.kind, printCase.c) }}</span></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" class="text-right font-bold">รวมทั้งสิ้น</td>
+                        <td class="text-right font-bold">{{ baht(totalOf(printCase.c)) }}</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="text-[12px] mt-3">{{ printCase.kind === 'repair' ? 'ลูกค้าได้ยืนยันการซ่อมตามรายการข้างต้นแล้ว กรุณาเก็บใบแจ้งซ่อมฉบับนี้ไว้เพื่อใช้ติดต่อร้านหรือรับเครื่องคืน' : 'ระยะเวลารับประกันนับจากวันที่ซ่อมเสร็จ ตามประเภทอะไหล่ที่ระบุข้างต้น · ขอบคุณที่ใช้บริการ' }}</p>
+            <div class="grid grid-cols-2 gap-10 mt-14 text-center text-[12px]">
+                <div class="border-t border-black pt-1">{{ printCase.kind === 'repair' ? 'ลายเซ็นลูกค้า' : 'ลายเซ็นผู้รับเครื่องคืน' }}</div>
+                <div class="border-t border-black pt-1">{{ printCase.kind === 'repair' ? 'ผู้รับเรื่องซ่อม (ร้าน)' : 'ผู้รับเงิน (ร้าน)' }}</div>
+            </div>
+        </div>
+
+        <!-- เลขเวอร์ชัน (มุมล่างซ้าย) -->
+        <div class="fixed bottom-2 left-3 z-40 text-xs text-gray-400 select-none pointer-events-none no-print">Version {{ version }}</div>
+
+    </div>
+    <script>
+// วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
+const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
+const KEY = 'repair_cases', USERS_KEY = 'repair_users', SESSION_KEY = 'repair_session';
+const APP_VERSION = '1.0.4';
+// สถานะการซ่อม -> สีป้าย / สีขอบการ์ด
+const STATUSES = [
+    { key: 'รอรับงาน', badge: 'bg-yellow-100 text-yellow-700', border: 'border-yellow-400' },
+    { key: 'กำลังดำเนินการ', badge: 'bg-orange-100 text-orange-600', border: 'border-orange-500' },
+    { key: 'รออะไหล่', badge: 'bg-sky-100 text-sky-700', border: 'border-sky-500' },
+    { key: 'เสร็จสิ้น', badge: 'bg-green-100 text-green-700', border: 'border-green-500' },
+    { key: 'ยกเลิก', badge: 'bg-red-100 text-red-700', border: 'border-red-500' }
+];
+// ระยะเวลารับประกัน (วัน) ตามหมวดและประเภทอะไหล่ — หมวด/ประเภทที่ไม่ได้ระบุ = 30 วัน
+const WARRANTY_DAYS = { 'หน้าจอ': { 'TFT': 30, 'OLED': 60, 'OR': 90 }, 'แบตเตอรี่': { 'งานธรรมดา': 90, 'งานขึ้นใช้แล้ว': 180, 'ของแท้แกะเครื่อง': 365 } };
+const DEFAULT_WARRANTY_DAYS = 30;
+const warrantyDays = (cat, type) => (WARRANTY_DAYS[cat] && WARRANTY_DAYS[cat][type]) || DEFAULT_WARRANTY_DAYS;
+const post = p => fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(p)}).then(r => r.json());
+const readJSON = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } };
+// เข้ารหัสรหัสผ่านก่อนเก็บ/ส่ง (SHA-256) — ถ้าเบราว์เซอร์ไม่รองรับจะใช้ข้อความตรงๆ (ใช้งานจริงควรตรวจสอบที่ฝั่งเซิร์ฟเวอร์ด้วย)
+async function hashPw(user, pw) {
+    try {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('repair|' + user.toLowerCase() + '|' + pw));
+        return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) { return 'plain:' + pw; }
+}
+// ข้อความในเคส: messages = [{ id, from: 'admin'|'customer', text, at }] — เคสเก่าที่มีแค่ admin_note จะแสดงเป็นข้อความแรกจากร้าน
+const thread = c => {
+    let m = c.messages;
+    if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { m = []; } }
+    if (Array.isArray(m) && m.length) return m;
+    return c.admin_note ? [{ id: 'M-LEGACY', from: 'admin', text: c.admin_note, at: c.note_date || '' }] : [];
+};
+const newMsgId = () => 'M-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+// ข้อมูลเคสที่ลูกค้าเห็นได้ (ไม่ส่งต้นทุน/ข้อมูลภายในร้าน)
+const view = c => ({
+    id: c.id, name: c.name || '', color: c.color || '', model: c.model, problem: c.problem, problem_desc: c.problem_desc || '', date: c.date, status: c.status, phone: c.phone,
+    admin_note: c.admin_note || '', note_date: c.note_date || '', messages: thread(c),
+    offers: (c.offers || []).map(o => ({ id: o.id, category: o.category, type: o.type, model: o.model, price: o.price })),
+    offer_date: c.offer_date || '', decision: c.decision || '', chosen: c.chosen || '', decision_date: c.decision_date || '',
+    addons: (c.addons || []).map(a => ({ id: a.id, category: a.category, type: a.type, model: a.model, price: a.price, offer_date: a.offer_date || '', decision: a.decision || '', decision_date: a.decision_date || '' })),
+    done_at: c.done_at || (c.requisition && c.requisition.at) || '',
+    cancel_by: c.cancel_by || '', cancel_date: c.cancel_date || '',
+    delivery_method: c.delivery_method || '', received_by: c.received_by || '', received_at: c.received_at || ''
+});
+const phoneDigits = s => String(s).replace(/\D/g, '');
+const Store = {
+    async add(c) {
+        if (API_URL) { const r = await post({action:'add', data:c}); if (!r.ok) throw new Error('add failed'); return; }
+        const l = readJSON(KEY, []); l.unshift(c); localStorage.setItem(KEY, JSON.stringify(l));
+    },
+    async track(id, phone) {
+        if (API_URL) { const r = await (await fetch(`${API_URL}?action=track&id=${encodeURIComponent(id)}&phone=${encodeURIComponent(phone)}`)).json(); return r.ok ? r.data : null; }
+        const c = readJSON(KEY, []).find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
+        return c ? view(c) : null;
+    },
+    // ลูกค้าตัดสินใจ: decision = 'accept' (ซ่อม + เลือกข้อเสนอ chosen) | 'decline' (ไม่ซ่อม)
+    async decide(id, phone, decision, chosen, date) {
+        if (API_URL) { const r = await post({action:'decide', id, phone, decision, chosen, date}); if (!r.ok) throw new Error('decide failed'); return; }
+        const l = readJSON(KEY, []);
+        const c = l.find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
+        if (!c) throw new Error('case not found');
+        c.decision = decision; c.chosen = chosen; c.decision_date = date;
+        localStorage.setItem(KEY, JSON.stringify(l));
+    },
+    // ยกเลิกงานซ่อมโดยลูกค้า (ตรวจรหัสเคส + เบอร์โทร · ใช้ได้เมื่อเคสยังไม่เสร็จสิ้นและยังไม่ถูกยกเลิก)
+    async cancel(id, phone, date) {
+        if (API_URL) { const r = await post({action:'cancel', by:'customer', id, phone, date}); if (!r.ok) throw new Error('cancel failed'); return; }
+        const l = readJSON(KEY, []);
+        const c = l.find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
+        if (!c) throw new Error('case not found');
+        if (c.status === 'เสร็จสิ้น' || c.status === 'ยกเลิก') throw new Error('not cancellable');
+        c.status = 'ยกเลิก'; c.cancel_by = 'customer'; c.cancel_date = date;
+        localStorage.setItem(KEY, JSON.stringify(l));
+    },
+    // ลูกค้ารับ/ไม่รับงานซ่อมเพิ่มระหว่างซ่อม (decision = 'accept' | 'decline')
+    async decideAddon(id, phone, addonId, decision, date) {
+        if (API_URL) { const r = await post({action:'addonDecide', id, phone, addonId, decision, date}); if (!r.ok) throw new Error('addon decide failed'); return; }
+        const l = readJSON(KEY, []);
+        const c = l.find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
+        if (!c) throw new Error('case not found');
+        if (c.status === 'เสร็จสิ้น' || c.status === 'ยกเลิก') throw new Error('case closed');
+        const a = (c.addons || []).find(x => x.id === addonId);
+        if (!a) throw new Error('addon not found');
+        a.decision = decision; a.decision_date = date;
+        localStorage.setItem(KEY, JSON.stringify(l));
+    },
+    // ลูกค้าเลือกวิธีส่งเครื่อง (ship = จัดส่งทางไปรษณีย์/ขนส่ง · walkin = นำมาหน้าร้านเอง) เก็บในเคสเพื่อให้หลังบ้านเห็น
+    async setDelivery(id, phone, method) {
+        if (API_URL) { const r = await post({action:'delivery', id, phone, method}); if (!r.ok) throw new Error('delivery failed'); return; }
+        const l = readJSON(KEY, []);
+        const c = l.find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
+        if (!c) throw new Error('case not found');
+        c.delivery_method = method;
+        localStorage.setItem(KEY, JSON.stringify(l));
+    },
+    // ลูกค้าส่งข้อความเข้าเคส (ตรวจรหัสเคส + เบอร์โทรเหมือนตอนตัดสินใจซ่อม)
+    async addMessage(id, phone, msg) {
+        if (API_URL) { const r = await post({action:'message', id, phone, message:msg}); if (!r.ok) throw new Error('message failed'); return; }
+        const l = readJSON(KEY, []);
+        const c = l.find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
+        if (!c) throw new Error('case not found');
+        c.messages = thread(c).concat(msg);
+        localStorage.setItem(KEY, JSON.stringify(l));
+    },
+    // ----- บัญชีผู้ใช้ -----
+    async register(u) {
+        const hash = await hashPw(u.username, u.password);
+        const rec = { username: u.username, name: u.name, phone: u.phone, email: u.email || '' };
+        if (API_URL) { const r = await post({action:'register', user:rec, hash}); if (!r.ok) throw new Error(r.error || 'register failed'); return { ...(r.user || rec), token: r.token }; }
+        const l = readJSON(USERS_KEY, []);
+        if (l.some(x => x.username.toLowerCase() === u.username.toLowerCase())) throw new Error('exists');
+        l.push({ ...rec, hash }); localStorage.setItem(USERS_KEY, JSON.stringify(l));
+        return rec;
+    },
+    async login(username, password) {
+        const hash = await hashPw(username, password);
+        if (API_URL) { const r = await post({action:'login', username, hash}); if (!r.ok) throw new Error('bad'); return { ...r.user, token: r.token }; }
+        const u = readJSON(USERS_KEY, []).find(x => x.username.toLowerCase() === username.toLowerCase() && x.hash === hash);
+        if (!u) throw new Error('bad');
+        return { username: u.username, name: u.name, phone: u.phone, email: u.email };
+    },
+    // เคสทั้งหมดของผู้ใช้คนนี้ (ใหม่สุดก่อน)
+    async mine(user) {
+        if (API_URL) { const r = await (await fetch(`${API_URL}?action=mine&user=${encodeURIComponent(user.username)}&token=${encodeURIComponent(user.token || '')}`)).json(); return r.ok ? r.data : []; }
+        return readJSON(KEY, []).filter(c => c.owner === user.username).map(view);
+    }
+};
+// กล่องแชทต่อเคส: me = 'admin' | 'customer' · send(text) ต้องคืนค่า Promise<boolean> (false = ส่งไม่สำเร็จ จะคงข้อความที่พิมพ์ไว้)
+const ChatThread = {
+    props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' } },
+    data() { return { text: '', sending: false }; },
+    watch: { 'msgs.length'() { this.toBottom(); } },
+    mounted() { this.toBottom(); },
+    methods: {
+        toBottom() { this.$nextTick(() => { const el = this.$refs.box; if (el) el.scrollTop = el.scrollHeight; }); },
+        fmt(at) { const d = new Date(at); return isNaN(d) ? String(at || '') : d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }); },
+        who(m) { return m.from === 'admin' ? 'ร้าน' : (this.me === 'customer' ? 'คุณ' : 'ลูกค้า'); },
+        async submit() {
+            const t = this.text.trim(); if (!t || this.sending) return;
+            this.sending = true;
+            try { if ((await this.send(t)) !== false) this.text = ''; } finally { this.sending = false; }
+        },
+        onEnter(e) { if (e.shiftKey || e.isComposing) return; e.preventDefault(); this.submit(); }
+    },
+    template: `
+        <div>
+            <div ref="box" :class="height" class="overflow-y-auto bg-gray-50 border rounded p-3 space-y-2">
+                <p v-if="!msgs.length" class="text-center text-sm text-gray-400 py-6">ยังไม่มีข้อความ พิมพ์ข้อความเพื่อเริ่มสนทนาได้เลย</p>
+                <div v-for="(m, i) in msgs" :key="m.id || i" :class="m.from === me ? 'items-end' : 'items-start'" class="flex flex-col">
+                    <span class="text-[11px] text-gray-400 mb-0.5">{{ who(m) }} · {{ fmt(m.at) }}</span>
+                    <div :class="m.from === me ? 'bg-blue-600 text-white' : 'bg-white border text-gray-800'" class="px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-line break-words text-sm">{{ m.text }}</div>
+                </div>
+            </div>
+            <div class="flex gap-2 mt-2">
+                <textarea v-model="text" @keydown.enter="onEnter" rows="2" maxlength="1000" placeholder="พิมพ์ข้อความ (Enter = ส่ง · Shift+Enter = ขึ้นบรรทัดใหม่)" class="flex-1 p-2 border rounded text-sm resize-none"></textarea>
+                <button @click="submit" :disabled="!text.trim() || sending" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700 disabled:opacity-40" title="ส่งข้อความ"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>`
+};
+const { createApp } = Vue
+const blankForm = (u) => ({ name: u ? (u.name || '') : '', nickname:'', phone: u ? (u.phone || '') : '', email: u ? (u.email || '') : '', screen_password:'', model:'', color:'', model_number:'', problem:'', problem_desc:'', photos:['','','',''] });
+createApp({
+    data() {
+        return {
+            role: 'customer', currentView: 'login', version: APP_VERSION,
+            user: null, timer: null,
+            lf: { username: '', password: '' }, rf: { name: '', phone: '', email: '', username: '', password: '', confirm: '' },
+            authError: '', authBusy: false,
+            mine: [], mineFilter: '',
+            iosModels: [
+                        'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 'iPhone 7', 'iPhone 7 Plus',
+                        'iPhone 8', 'iPhone 8 Plus', 'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+                        'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max', 'iPhone 12 mini', 'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+                        'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max', 'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+                        'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max', 'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+                        'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 18', 'iPhone 18 Pro', 'iPhone 18 Pro Max'
+                    ],
+            form: blankForm(null), submitting: false,
+            delivery: { show: false, method: '', copied: false },
+            shop: { address: '25 124 หมู่ 3 สุรศักดิ์ อำเภอศรีราชา ชลบุรี 20110', mapUrl: 'https://maps.app.goo.gl/Jj3WS2KB7LAZbZ976' },
+            lastSubmitted: {}, printCase: null, track: { id:'', phone:'', result:null, error:'', pick:'', busy:false, showOffers:false, fromHome:false }
+        }
+    },
+    computed: {
+        statusSummary() { return STATUSES.map(s => ({ ...s, count: this.mine.filter(c => c.status === s.key).length })); },
+        mineFiltered() { return this.mineFilter ? this.mine.filter(c => c.status === this.mineFilter) : this.mine; },
+        pendingCount() { return this.mine.filter(c => this.needsDecision(c) || this.pendingAddons(c) > 0).length; }
+    },
+    mounted() {   // กลับมาที่หน้าเดิมถ้ายังไม่ปิดแท็บ
+        try {
+            const u = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+            if (u && u.username) { this.user = u; this.currentView = 'home'; this.loadMine(); this.startTimer(); }
+        } catch (e) { /* ไม่มี session */ }
+    },
+    methods: {
+        baht(n) { return '฿ ' + Number(n || 0).toLocaleString('th-TH'); },
+        badge(st) { return (STATUSES.find(x => x.key === st) || {}).badge || 'bg-gray-100 text-gray-600'; },
+        statusBorder(st) { return (STATUSES.find(x => x.key === st) || {}).border || 'border-gray-300'; },
+        needsDecision(c) { return this.isOpen(c) && !!(c.offers && c.offers.length) && !c.decision; },
+        chosenLabel(c) { const o = (c.offers || []).find(x => x.id === c.chosen); return o ? `${o.category} · ${o.type} ${this.baht(o.price)}` : '-'; },
+        // ----- สถานะเคส / รับประกัน / งานเพิ่ม / เอกสารพิมพ์ -----
+        isOpen(c) { return !!c && c.status !== 'เสร็จสิ้น' && c.status !== 'ยกเลิก'; },   // ยังแก้ไขการซ่อมได้ (ยังไม่เสร็จและยังไม่ยกเลิก)
+        pendingAddons(c) { return this.isOpen(c) ? (c.addons || []).filter(a => !a.decision).length : 0; },   // งานซ่อมเพิ่มที่รอลูกค้าตัดสินใจ
+        warranty(cat, type) { return warrantyDays(cat, type); },
+        // รายการที่ลูกค้ายืนยันแล้ว = อะไหล่ที่เลือกซ่อม + งานซ่อมเพิ่มที่ลูกค้ารับแล้ว
+        itemsOf(c) {
+            if (!c || c.decision !== 'accept') return [];
+            const o = (c.offers || []).find(x => x.id === c.chosen);
+            return [...(o ? [{ ...o, kind: 'main' }] : []), ...(c.addons || []).filter(a => a.decision === 'accept').map(a => ({ ...a, kind: 'addon' }))];
+        },
+        totalOf(c) { return this.itemsOf(c).reduce((s, x) => s + (Number(x.price) || 0), 0); },
+        fmtDate(iso) { const d = new Date(iso); return isNaN(d) ? '-' : d.toLocaleDateString('th-TH', { dateStyle: 'medium' }); },
+        warrantyEnd(iso, days) { const d = new Date(iso); if (isNaN(d)) return '-'; d.setDate(d.getDate() + days); return d.toLocaleDateString('th-TH', { dateStyle: 'medium' }); },
+        warrantyText(days, kind, c) { return kind === 'repair' ? days + ' วัน (นับจากวันที่ซ่อมเสร็จ)' : days + ' วัน' + (c.done_at ? ' (ถึงวันที่ ' + this.warrantyEnd(c.done_at, days) + ')' : ''); },
+        // ใบเสร็จ: อะไหล่หลักแต่ละชิ้นเป็น 1 บรรทัด · งานซ่อมเพิ่มเติมทั้งหมดคิดเป็น "รายการเดียว" (ยอดรวม) และแสดงรายการย่อยพร้อมรับประกัน
+        billLines(c) {
+            const row = x => ({ key: x.id, title: x.category + ' · ' + x.type, model: x.model, price: Number(x.price) || 0, warranty: this.warranty(x.category, x.type) });
+            const items = this.itemsOf(c);
+            const lines = items.filter(x => x.kind === 'main').map(row);
+            const adds = items.filter(x => x.kind === 'addon').map(row);
+            if (adds.length) lines.push({ key: 'addons', title: 'งานซ่อมเพิ่มเติม (' + adds.length + ' รายการ)', price: adds.reduce((s, x) => s + x.price, 0), parts: adds });
+            return lines;
+        },
+        // พิมพ์ใบแจ้งซ่อม (kind = 'repair') หรือใบเสร็จรับเงิน (kind = 'receipt') ของเคสที่เปิดอยู่
+        printDoc(kind) {
+            if (!this.track.result) return;
+            this.printCase = { kind, c: this.track.result };
+            this.$nextTick(() => { try { window.print(); } finally { this.printCase = null; } });
+        },
+        async cancelCase() {   // ลูกค้ายกเลิกงานซ่อมเอง (ได้เมื่อเคสยังไม่เสร็จสิ้น)
+            const c = this.track.result;
+            if (!c || this.track.busy || !this.isOpen(c)) return;
+            if (!confirm(`ยืนยันยกเลิกงานซ่อมเคส ${c.id} ?\nเมื่อยกเลิกแล้วจะไม่สามารถกลับมาซ่อมเคสนี้ต่อได้`)) return;
+            this.track.busy = true;
+            try { await Store.cancel(c.id, this.track.phone, new Date().toLocaleString('th-TH')); await this.loadTrack(); }
+            catch (e) { alert('ยกเลิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+            this.track.busy = false;
+        },
+        async decideAddon(a, decision) {   // ลูกค้ารับ/ไม่รับงานซ่อมเพิ่ม
+            if (this.track.busy || !this.isOpen(this.track.result)) return;
+            if (decision === 'accept' && !confirm(`ยืนยันรับงานซ่อมเพิ่ม "${a.category} · ${a.type}" ราคา ${this.baht(a.price)} ?`)) return;
+            this.track.busy = true;
+            try { await Store.decideAddon(this.track.result.id, this.track.phone, a.id, decision, new Date().toLocaleString('th-TH')); await this.loadTrack(); }
+            catch (e) { alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+            this.track.busy = false;
+        },
+        // ----- ข้อความกับร้าน -----
+        msgsOf(c) { return thread(c); },
+        lastFrom(c) { const t = thread(c); return t.length ? t[t.length - 1].from : ''; },
+        async sendMsg(text) {   // ส่งข้อความเข้าเคสที่เปิดอยู่ (คืน false = ส่งไม่สำเร็จ)
+            const r = this.track.result; if (!r || !String(text || '').trim()) return false;
+            try {
+                await Store.addMessage(r.id, this.track.phone, { id: newMsgId(), from: 'customer', text: String(text).trim(), at: new Date().toISOString() });
+                await this.loadTrack();
+                return true;
+            } catch (e) { alert('ส่งข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); return false; }
+        },
+
+        // ----- สมาชิก -----
+        goRegister() { this.authError = ''; this.currentView = 'register'; },
+        guestTrack() { this.authError = ''; this.track = { id:'', phone:'', result:null, error:'', pick:'', busy:false, showOffers:false, fromHome:false }; this.currentView = 'track'; this.startTimer(); },
+        async enter(u) {
+            this.user = u; this.authError = '';
+            try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(u)); } catch (e) {}
+            this.lf = { username: '', password: '' }; this.rf = { name: '', phone: '', email: '', username: '', password: '', confirm: '' };
+            this.mineFilter = ''; this.currentView = 'home';
+            await this.loadMine(); this.startTimer();
+        },
+        async login() {
+            if (this.authBusy) return;
+            if (!this.lf.username || !this.lf.password) { this.authError = 'กรุณากรอก Username และ Password'; return; }
+            this.authBusy = true;
+            try { await this.enter(await Store.login(this.lf.username, this.lf.password)); }
+            catch (e) { this.authError = 'Username หรือ Password ไม่ถูกต้อง'; }
+            this.authBusy = false;
+        },
+        async register() {
+            if (this.authBusy) return;
+            const r = this.rf;
+            if (!r.name || !r.phone || !r.username || !r.password) { this.authError = 'กรุณากรอกชื่อ เบอร์โทร Username และ Password ให้ครบ'; return; }
+            if (r.username.length < 3) { this.authError = 'Username ต้องมีอย่างน้อย 3 ตัวอักษร'; return; }
+            if (r.password.length < 6) { this.authError = 'Password ต้องมีอย่างน้อย 6 ตัวอักษร'; return; }
+            if (r.password !== r.confirm) { this.authError = 'ยืนยัน Password ไม่ตรงกัน'; return; }
+            this.authBusy = true;
+            try { await this.enter(await Store.register(r)); }
+            catch (e) { this.authError = e.message === 'exists' ? 'Username นี้ถูกใช้แล้ว กรุณาใช้ชื่ออื่น' : 'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่'; }
+            this.authBusy = false;
+        },
+        logout() {
+            clearInterval(this.timer); this.timer = null; this.user = null; this.mine = [];
+            try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+            this.track = { id:'', phone:'', result:null, error:'', pick:'', busy:false, showOffers:false, fromHome:false };
+            this.currentView = 'login';
+        },
+        // ----- หน้าหลัก -----
+        async loadMine() { if (!this.user) return; try { this.mine = await Store.mine(this.user); } catch (e) { console.error(e); } },
+        startTimer() {   // อัปเดตสถานะเคสจากร้านทุก 5 วินาที
+            clearInterval(this.timer);
+            this.timer = setInterval(() => {
+                if (this.currentView === 'home' && this.user) this.loadMine();
+                else if (this.currentView === 'track' && this.track.result && !this.track.busy) this.loadTrack();   // รวมลูกค้าที่ไม่ได้ล็อกอิน เพื่อให้เห็นข้อความจากร้านทันที
+            }, 5000);
+        },
+        toHome() { this.currentView = 'home'; this.loadMine(); },
+        newCase() { this.form = blankForm(this.user); this.currentView = 'form'; },
+        async openCase(c) {
+            this.track = { id: c.id, phone: c.phone, result: null, error: '', pick: '', busy: false, showOffers: false, fromHome: true };
+            this.currentView = 'track';
+            await this.loadTrack();
+            const r = this.track.result;
+            if (r && this.needsDecision(r)) this.track.showOffers = true;   // มีข้อเสนอรอตัดสินใจ -> เปิดให้เลย
+        },
+        backFromTrack() {
+            this.track.result = null; this.track.error = '';
+            if (this.user) this.toHome(); else this.currentView = 'login';
+        },
+        // ----- ฟอร์มส่งซ่อม -----
+        pickPhoto(e, idx) {   // ย่อรูปเหลือ ~900px / JPEG ก่อนส่ง เพื่อให้ไฟล์เล็ก
+            const f = e.target.files[0]; if (!f) return;
+            const img = new Image(), url = URL.createObjectURL(f);
+            img.onload = () => {
+                const s = Math.min(1, 900 / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+                cv.width = img.width * s; cv.height = img.height * s;
+                cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+                this.form.photos[idx] = cv.toDataURL('image/jpeg', 0.7); URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        },
+        async checkTrack() {
+            this.track.result = null; this.track.error = ''; this.track.pick = ''; this.track.showOffers = false;
+            await this.loadTrack();
+        },
+        async loadTrack() {   // ดึงสถานะล่าสุด (ไม่ล้างผลเดิม เพื่อไม่ให้หน้ากระพริบ)
+            try {
+                const r = await Store.track(this.track.id.trim(), this.track.phone);
+                if (r) {
+                    this.track.result = r; this.track.error = '';
+                    const keep = (r.offers || []).some(o => o.id === this.track.pick);
+                    this.track.pick = r.chosen || (keep ? this.track.pick : '');
+                } else this.track.error = 'ไม่พบเคส กรุณาตรวจสอบรหัสเคสและเบอร์โทร';
+            } catch (e) { this.track.error = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่'; }
+        },
+        openDelivery() {   // หน้าเลือกวิธีส่งเครื่อง + ที่อยู่/แผนที่ร้าน (ค่าที่เลือกไว้ล่าสุดของเคส)
+            this.delivery = { show: true, method: (this.track.result && this.track.result.delivery_method) || '', copied: false };
+        },
+        async setDelivery(m) {
+            this.delivery.method = m;
+            try { await Store.setDelivery(this.track.result.id, this.track.phone, m); await this.loadTrack(); }
+            catch (e) { alert('บันทึกวิธีส่งเครื่องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+        },
+        async copyAddress() {
+            try { await navigator.clipboard.writeText(this.shop.address); this.delivery.copied = true; setTimeout(() => this.delivery.copied = false, 2000); } catch (e) { alert(this.shop.address); }
+        },
+        async decide(decision) {   // ซ่อม (ตามข้อเสนอที่เลือก/เปลี่ยนเป็นประเภทอื่น) หรือ ไม่ซ่อม
+            if (this.track.busy || !this.isOpen(this.track.result)) return;
+            if (decision === 'accept' && !this.track.pick) return;
+            if (decision === 'decline' && !confirm('ยืนยันไม่ซ่อมเครื่องนี้?')) return;
+            this.track.busy = true;
+            try {
+                await Store.decide(this.track.result.id, this.track.phone, decision, decision === 'accept' ? this.track.pick : '', new Date().toLocaleString('th-TH'));
+                await this.loadTrack();
+                if (decision === 'accept') this.openDelivery();
+            } catch (e) { alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+            this.track.busy = false;
+        },
+        async submitForm() {
+            if (this.submitting) return;
+            if (!this.form.name || !this.form.model || !this.form.problem) {
+                alert('กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (ชื่อ, รุ่น, อาการเสีย)'); return;
+            }
+            if (this.form.photos.some(p => !p)) { alert('กรุณาแนบรูปให้ครบ 4 รูป'); return; }
+            this.submitting = true;
+            const newCase = { id: 'C-' + Date.now().toString(36).slice(-6).toUpperCase(), date: new Date().toLocaleDateString('th-TH'), status: 'รอรับงาน', owner: this.user ? this.user.username : '', ...this.form };
+            try { await Store.add(newCase); } catch (e) { alert('ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); this.submitting = false; return; }
+            this.submitting = false;
+            this.lastSubmitted = { ...newCase };
+            this.loadMine();
+            this.currentView = 'receipt';
+        }
+    }
+}).component('chat-thread', ChatThread).mount('#app')
+    </script>
+</body>
+</html>
