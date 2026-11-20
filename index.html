@@ -274,7 +274,7 @@
                         <!-- ข้อความกับร้าน (ลูกค้าส่งเข้าเคสนี้ได้ ร้านเห็นและตอบกลับในระบบหลังบ้าน) -->
                         <div class="mt-4">
                             <h3 class="font-semibold text-gray-700 mb-2"><i class="fas fa-comments text-blue-600"></i> ข้อความกับร้าน</h3>
-                            <chat-thread :msgs="msgsOf(track.result)" me="customer" :send="sendMsg" height="h-56"></chat-thread>
+                            <chat-thread :msgs="msgsOf(track.result)" me="customer" :send="sendMsg" :room="rooms[track.result.id] || ''" height="h-56"></chat-thread>
                         </div>
 
                         <!-- เสนอราคาจากร้าน -->
@@ -445,7 +445,7 @@
 // วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
 const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
 const KEY = 'repair_cases', USERS_KEY = 'repair_users', SESSION_KEY = 'repair_session';
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 // สถานะการซ่อม -> สีป้าย / สีขอบการ์ด
 const STATUSES = [
     { key: 'รอรับงาน', badge: 'bg-yellow-100 text-yellow-700', border: 'border-yellow-400' },
@@ -468,6 +468,68 @@ async function fetchJson(url, opts, ms, retries) {
     }
 }
 const post = p => fetchJson(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p) }, 40000, 0);
+// ===== แชทเรียลไทม์ผ่าน Firebase Realtime Database (REST + EventSource ไม่ต้องติดตั้ง SDK) =====
+// ปล่อยว่าง = ปิดระบบนี้ (แชทไปทาง Google Sheet อย่างเดียว) · ใส่ URL ของ Realtime Database เช่น https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
+// ข้อความขึ้นห้องแชทสดทันที แล้วบันทึกลง Google Sheet เบื้องหลังเป็นประวัติถาวร (ถ้า Firebase ใช้ไม่ได้ จะส่งผ่าน Sheet ตามเดิม)
+const FIREBASE_URL = '';
+const FB = {
+    on: () => !!FIREBASE_URL,
+    url: (path, query) => FIREBASE_URL.replace(/\/+$/, '') + '/' + path + '.json' + (query || ''),
+    // รหัสห้องแชท: คำนวณจากรหัสเคส + เบอร์โทร (SHA-256) — เดาไม่ได้ถ้าไม่รู้ทั้งสองอย่าง และใครก็ดูรายชื่อห้องทั้งหมดไม่ได้
+    async roomKey(id, phone) {
+        try {
+            const raw = 'omirim|' + String(id).toUpperCase() + '|' + String(phone == null ? '' : phone).replace(/\D/g, '');
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+            return 'r_' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+        } catch (e) { return ''; }   // เบราว์เซอร์ไม่รองรับ → ปิดแชทสดของเคสนี้ ใช้ Sheet แทน
+    },
+    async request(url, opts, ms) {
+        const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms || 10000);
+        try { return await fetch(url, { ...(opts || {}), signal: ctl.signal }); } finally { clearTimeout(timer); }
+    },
+    async get(path) { try { const r = await FB.request(FB.url(path)); return r.ok ? await r.json() : null; } catch (e) { return null; } },
+    // เขียนข้อความ (รหัสข้อความ = ชื่อคีย์ ส่งซ้ำจึงไม่เกิดข้อความซ้ำ) · ข้อความจากลูกค้าจะประกาศในช่องแจ้งเตือนของหลังบ้านด้วย
+    async put(room, m) {
+        try {
+            const path = 'chats/' + room + '/msgs/' + m.id;
+            const msg = FB.request(FB.url(path), { method: 'PUT', body: JSON.stringify({ from: m.from, text: m.text, at: m.at }) });
+            if (m.from === 'customer') FB.request(FB.url('activity/feed/' + m.id), { method: 'PUT', body: JSON.stringify({ room, from: 'customer', at: m.at }) }).catch(() => null);
+            const res = await msg;
+            if (res.ok) return true;
+            if (res.status === 401) {   // อาจมีข้อความรหัสนี้อยู่แล้ว (เคยส่งถึงแต่คำตอบหลุด) → ถ้าเนื้อหาตรงกันนับว่าสำเร็จ
+                const d = await FB.get(path);
+                if (d && d.text === m.text) return true;
+            }
+            return false;
+        } catch (e) { return false; }
+    },
+    // ฟังข้อมูลแบบสด (Server-Sent Events) → เรียก onData(ข้อมูลทั้งก้อน) ทุกครั้งที่เปลี่ยน · onStatus(true/false) = เชื่อมต่อได้/หลุด · คืนฟังก์ชันหยุดฟัง
+    listen(path, query, onData, onStatus) {
+        let state = null;
+        const setAt = (parts, val) => {
+            if (!parts.length) { state = val === undefined ? null : val; return; }
+            if (!state || typeof state !== 'object') state = {};
+            let o = state;
+            parts.slice(0, -1).forEach(k => { if (!o[k] || typeof o[k] !== 'object') o[k] = {}; o = o[k]; });
+            if (val === null || val === undefined) delete o[parts[parts.length - 1]]; else o[parts[parts.length - 1]] = val;
+        };
+        const apply = (ev, merge) => {
+            try {
+                const { path: p, data } = JSON.parse(ev.data), parts = String(p).split('/').filter(Boolean);
+                if (merge) Object.keys(data || {}).forEach(k => setAt(parts.concat(k.split('/').filter(Boolean)), data[k]));
+                else setAt(parts, data);
+                onData(state && typeof state === 'object' ? state : {});
+            } catch (e) { /* ข้อมูลไม่สมบูรณ์ ข้ามไป */ }
+        };
+        const es = new EventSource(FB.url(path, query));
+        es.onopen = () => { if (onStatus) onStatus(true); };
+        es.onerror = () => { if (onStatus) onStatus(false); };   // EventSource ต่อใหม่เองอัตโนมัติ
+        es.addEventListener('put', ev => apply(ev, false));
+        es.addEventListener('patch', ev => apply(ev, true));
+        es.addEventListener('cancel', () => { es.close(); if (onStatus) onStatus(false); });
+        return () => es.close();
+    }
+};
 // รอบตรวจสถานะเคสจากร้าน (นับจากต้นรอบ · Apps Script ตอบ ~1.5-3 วินาที/ครั้ง): กำลังดูเคส = เร็ว · หน้ารายการ = ช้ากว่า · ไม่มีใครแตะหน้าจอนาน = ช้ามาก
 const POLL_FAST_MS = 3000, POLL_HOME_MS = 8000, POLL_IDLE_MS = 20000, IDLE_AFTER_MS = 10 * 60 * 1000;
 let lastActive = Date.now();
@@ -616,19 +678,26 @@ const Store = {
 };
 // กล่องแชทต่อเคส: me = 'admin' | 'customer' · send(text) ต้องคืนค่า Promise<boolean> (false = ส่งไม่สำเร็จ จะคงข้อความที่พิมพ์ไว้)
 const ChatThread = {
-    props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' } },
-    data() { return { text: '', pending: [] }; },
+    props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' }, room: { type: String, default: '' } },
+    emits: ['live'],
+    data() { return { text: '', pending: [], live: [] }; },
     computed: {
         // ข้อความที่ยืนยันแล้ว + ข้อความที่กำลังส่ง (แสดงทันทีโดยไม่ต้องรอเซิร์ฟเวอร์) · ตัดข้อความซ้ำตามรหัส
-        shown() {
+        shown() {   // ข้อความจาก Sheet + จากแชทสด + ที่กำลังส่ง · ตัดซ้ำตามรหัส · เรียงตามเวลา (ข้อความจากแชทสดอาจมาก่อนที่ Sheet จะบันทึก)
             const seen = new Set(), list = [];
-            for (const m of this.msgs) { if (m.id) { if (seen.has(m.id)) continue; seen.add(m.id); } list.push(m); }
-            for (const p of this.pending) if (!seen.has(p.id)) list.push(p);
-            return list;
+            const add = m => { if (m.id) { if (seen.has(m.id)) return; seen.add(m.id); } list.push(m); };
+            this.msgs.forEach(add); this.live.forEach(add); this.pending.forEach(add);
+            const t = m => (/^\d{4}-\d\d-\d\dT/.test(String(m.at)) ? Date.parse(m.at) : NaN);
+            return list.sort((a, b) => { const x = t(a), y = t(b); return isNaN(x) || isNaN(y) ? 0 : x - y; });
         }
     },
-    watch: { 'shown.length'() { this.toBottom(); } },
+    watch: {
+        'shown.length'() { this.toBottom(); },
+        room: { immediate: true, handler(r) { this.subscribe(r); } },
+        live(l) { this.$emit('live', l); }
+    },
     created() { this.chain = Promise.resolve(); },
+    beforeUnmount() { this.unsubscribe(); },
     mounted() { this.toBottom(); },
     methods: {
         toBottom() { this.$nextTick(() => { const el = this.$refs.box; if (el) el.scrollTop = el.scrollHeight; }); },
@@ -643,12 +712,29 @@ const ChatThread = {
         deliver(p) {   // ส่งทีละข้อความตามลำดับ (กันข้อความสลับลำดับ)
             p.state = 'sending';
             this.chain = this.chain.then(async () => {
-                let ok = false;
-                try { ok = (await this.send(p.text, p.id)) !== false; } catch (e) { ok = false; }
-                p.state = ok ? 'sent' : 'failed';
-                if (ok) setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);   // ข้อความจริงจากเซิร์ฟเวอร์ปรากฏแล้ว ล้างตัวชั่วคราวทิ้ง
+                const sheet = () => Promise.resolve(this.send(p.text, p.id)).then(r => r !== false, () => false);
+                if (this.room && FB.on() && await FB.put(this.room, p)) {   // ช่องทางเร็ว: อีกฝั่งที่เปิดแชทอยู่เห็นภายใน ~1 วินาที
+                    p.state = 'sent';
+                    this.saveToSheet(sheet);   // แล้วบันทึกลง Sheet เบื้องหลัง (ประวัติถาวร)
+                } else {
+                    p.state = (await sheet()) ? 'sent' : 'failed';   // ไม่ได้ตั้งค่า/ใช้ Firebase ไม่ได้ → ส่งผ่าน Sheet ตามเดิม
+                }
+                if (p.state === 'sent') setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);   // ข้อความจริงปรากฏแล้ว ล้างตัวชั่วคราวทิ้ง
             });
         },
+        async saveToSheet(sheet) {   // บันทึกลง Sheet (ประวัติถาวร + ตัวบอก "ข้อความใหม่" ในหน้ารายการ) · ลองซ้ำเองถ้าล้มเหลว
+            for (const delay of [0, 2000, 6000, 15000]) {
+                if (delay) await new Promise(r => setTimeout(r, delay));
+                if (await sheet()) return;
+            }
+            console.warn('บันทึกข้อความลง Sheet ไม่สำเร็จ (ข้อความยังอยู่ในแชทสด)');
+        },
+        subscribe(room) {   // ฟังแชทสดของห้องนี้ (ไม่มีห้อง/ไม่ได้ตั้งค่า Firebase = ไม่ทำอะไร)
+            this.unsubscribe(); this.live = [];
+            if (!room || !FB.on()) return;
+            this.stop = FB.listen('chats/' + room + '/msgs', '', st => { this.live = Object.keys(st || {}).map(id => ({ id, ...st[id] })); });
+        },
+        unsubscribe() { if (this.stop) { this.stop(); this.stop = null; } },
         retry(p) { this.deliver(p); },
         discard(p) { this.pending = this.pending.filter(x => x !== p); },
         onEnter(e) { if (e.shiftKey || e.isComposing) return; e.preventDefault(); this.submit(); }
@@ -691,7 +777,7 @@ createApp({
             form: blankForm(null), submitting: false,
             delivery: { show: false, method: '', copied: false },
             shop: { address: '25 124 หมู่ 3 สุรศักดิ์ อำเภอศรีราชา ชลบุรี 20110', mapUrl: 'https://maps.app.goo.gl/Jj3WS2KB7LAZbZ976' },
-            lastSubmitted: {}, printCase: null, track: { id:'', phone:'', result:null, error:'', pick:'', busy:false, showOffers:false, fromHome:false }
+            lastSubmitted: {}, printCase: null, rooms: {}, track: { id:'', phone:'', result:null, error:'', pick:'', busy:false, showOffers:false, fromHome:false }
         }
     },
     computed: {
@@ -862,6 +948,10 @@ createApp({
             this.track.result = null; this.track.error = ''; this.track.pick = ''; this.track.showOffers = false;
             await this.loadTrack();
         },
+        ensureRoom(c) {   // รหัสห้องแชทสดของเคสนี้ (คำนวณจากรหัสเคส + เบอร์โทร)
+            if (!FB.on() || !c || this.rooms[c.id]) return;
+            FB.roomKey(c.id, c.phone).then(r => { if (r) this.rooms[c.id] = r; });
+        },
         loadTrack(quiet) { return this.trackLoader(quiet); },   // ดึงสถานะล่าสุด (ไม่ล้างผลเดิม เพื่อไม่ให้หน้ากระพริบ) · quiet = โพลล์เบื้องหลัง
         applyTrack(res, loud) {
             if (res.value) {
@@ -871,6 +961,7 @@ createApp({
                     this.track.result = r; this.track.error = '';
                     const keep = (r.offers || []).some(o => o.id === this.track.pick);
                     this.track.pick = r.chosen || (keep ? this.track.pick : '');
+                    this.ensureRoom(r);
                 } else if (loud) this.track.error = 'ไม่พบเคส กรุณาตรวจสอบรหัสเคสและเบอร์โทร';
             } else if (loud) this.track.error = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่';
             else console.error(res.error);   // โพลล์เบื้องหลังสะดุด: เงียบไว้ ใช้ข้อมูลเดิมต่อ แล้วรอบหน้าลองใหม่
@@ -879,3 +970,41 @@ createApp({
             this.delivery = { show: true, method: (this.track.result && this.track.result.delivery_method) || '', copied: false };
         },
         async setDelivery(m) {
+            this.delivery.method = m;
+            try { await Store.setDelivery(this.track.result.id, this.track.phone, m); await this.loadTrack(); }
+            catch (e) { alert('บันทึกวิธีส่งเครื่องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+        },
+        async copyAddress() {
+            try { await navigator.clipboard.writeText(this.shop.address); this.delivery.copied = true; setTimeout(() => this.delivery.copied = false, 2000); } catch (e) { alert(this.shop.address); }
+        },
+        async decide(decision) {   // ซ่อม (ตามข้อเสนอที่เลือก/เปลี่ยนเป็นประเภทอื่น) หรือ ไม่ซ่อม
+            if (this.track.busy || !this.isOpen(this.track.result)) return;
+            if (decision === 'accept' && !this.track.pick) return;
+            if (decision === 'decline' && !confirm('ยืนยันไม่ซ่อมเครื่องนี้?')) return;
+            this.track.busy = true;
+            try {
+                await Store.decide(this.track.result.id, this.track.phone, decision, decision === 'accept' ? this.track.pick : '', new Date().toLocaleString('th-TH'));
+                await this.loadTrack();
+                if (decision === 'accept') this.openDelivery();
+            } catch (e) { alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+            this.track.busy = false;
+        },
+        async submitForm() {
+            if (this.submitting) return;
+            if (!this.form.name || !this.form.model || !this.form.problem) {
+                alert('กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (ชื่อ, รุ่น, อาการเสีย)'); return;
+            }
+            if (this.form.photos.some(p => !p)) { alert('กรุณาแนบรูปให้ครบ 4 รูป'); return; }
+            this.submitting = true;
+            const newCase = { id: 'C-' + Date.now().toString(36).slice(-6).toUpperCase(), date: new Date().toLocaleDateString('th-TH'), status: 'รอรับงาน', owner: this.user ? this.user.username : '', ...this.form };
+            try { await Store.add(newCase); } catch (e) { alert('ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); this.submitting = false; return; }
+            this.submitting = false;
+            this.lastSubmitted = { ...newCase };
+            this.loadMine();
+            this.currentView = 'receipt';
+        }
+    }
+}).component('chat-thread', ChatThread).mount('#app')
+    </script>
+</body>
+</html>
