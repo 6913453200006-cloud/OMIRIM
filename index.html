@@ -251,7 +251,7 @@
                         </label>
                     </div>
 
-                    <button @click="submitForm" :disabled="submitting" class="w-full bg-green-600 text-white p-4 rounded font-bold text-lg hover:bg-green-700 disabled:opacity-50">ยืนยันการส่งซ่อม</button>
+                    <button @click="submitForm" :disabled="submitting" class="w-full bg-green-600 text-white p-4 rounded font-bold text-lg hover:bg-green-700 disabled:opacity-50">{{ submitting ? 'กำลังส่งเคส... (อัปโหลดรูป อาจใช้เวลา 10-20 วินาที กรุณาอย่าปิดหน้านี้)' : 'ยืนยันการส่งซ่อม' }}</button>
                 </div>
             </div>
 
@@ -445,7 +445,7 @@
 // วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
 const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
 const KEY = 'repair_cases', USERS_KEY = 'repair_users', SESSION_KEY = 'repair_session';
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 // สถานะการซ่อม -> สีป้าย / สีขอบการ์ด
 const STATUSES = [
     { key: 'รอรับงาน', badge: 'bg-yellow-100 text-yellow-700', border: 'border-yellow-400' },
@@ -458,7 +458,37 @@ const STATUSES = [
 const WARRANTY_DAYS = { 'หน้าจอ': { 'TFT': 30, 'OLED': 60, 'OR': 90 }, 'แบตเตอรี่': { 'งานธรรมดา': 90, 'งานขึ้นใช้แล้ว': 180, 'ของแท้แกะเครื่อง': 365 } };
 const DEFAULT_WARRANTY_DAYS = 30;
 const warrantyDays = (cat, type) => (WARRANTY_DAYS[cat] && WARRANTY_DAYS[cat][type]) || DEFAULT_WARRANTY_DAYS;
-const post = p => fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(p)}).then(r => r.json());
+// เรียก Apps Script: มี timeout กันค้างเมื่อเซิร์ฟเวอร์ช้าผิดปกติ · การอ่าน (GET) ลองซ้ำอีก 1 ครั้งเมื่อหมดเวลา/ล้มเหลว (การเขียน POST ไม่ลองซ้ำเอง กันบันทึกซ้ำ)
+async function fetchJson(url, opts, ms, retries) {
+    for (let i = 0; ; i++) {
+        const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+        try { return await (await fetch(url, { ...(opts || {}), signal: ctl.signal })).json(); }
+        catch (e) { if (i >= (retries || 0)) throw e; }
+        finally { clearTimeout(timer); }
+    }
+}
+const post = p => fetchJson(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p) }, 40000, 0);
+const POLL_MS = 8000;   // ความถี่ตรวจสถานะเคสจากร้าน (Apps Script ตอบ ~1.5-3 วินาที/ครั้ง จึงไม่ควรถี่กว่านี้)
+// ตัวโหลดแบบ "ทีละคำขอ": เรียกซ้อนได้แต่ส่งคำขอจริงทีละครั้ง · ถ้ามีคำสั่งโหลดใหม่เข้ามาระหว่างรอ จะทิ้งผลเก่า (อาจเก่ากว่าข้อมูลที่เพิ่งบันทึก) แล้วโหลดใหม่
+// request(quiet): quiet = true สำหรับโพลล์เบื้องหลัง (ไม่แจ้ง error ให้ผู้ใช้เห็น)
+function singleFlight(fetchFn, applyFn) {
+    let wanted = false, loud = false, running = null;
+    return quiet => {
+        wanted = true; if (!quiet) loud = true;
+        if (!running) running = (async () => {
+            try {
+                while (wanted) {
+                    wanted = false; const isLoud = loud; loud = false;
+                    let value, error = null;
+                    try { value = await fetchFn(); } catch (e) { error = e; }
+                    if (wanted) { loud = loud || isLoud; continue; }
+                    applyFn(error ? { error } : { value }, isLoud);
+                }
+            } finally { running = null; }
+        })();
+        return running;
+    };
+}
 const readJSON = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } };
 // เข้ารหัสรหัสผ่านก่อนเก็บ/ส่ง (SHA-256) — ถ้าเบราว์เซอร์ไม่รองรับจะใช้ข้อความตรงๆ (ใช้งานจริงควรตรวจสอบที่ฝั่งเซิร์ฟเวอร์ด้วย)
 async function hashPw(user, pw) {
@@ -493,7 +523,12 @@ const Store = {
         const l = readJSON(KEY, []); l.unshift(c); localStorage.setItem(KEY, JSON.stringify(l));
     },
     async track(id, phone) {
-        if (API_URL) { const r = await (await fetch(`${API_URL}?action=track&id=${encodeURIComponent(id)}&phone=${encodeURIComponent(phone)}`)).json(); return r.ok ? r.data : null; }
+        if (API_URL) {   // ไม่พบเคส = null · เซิร์ฟเวอร์ผิดพลาด = โยน error (ต่างกัน เพื่อไม่ให้แจ้ง "ไม่พบเคส" ทั้งที่แค่เซิร์ฟเวอร์สะดุด)
+            const r = await fetchJson(`${API_URL}?action=track&id=${encodeURIComponent(id)}&phone=${encodeURIComponent(phone)}`, null, 15000, 1);
+            if (r.ok) return r.data;
+            if (r.error) throw new Error(r.error);
+            return null;
+        }
         const c = readJSON(KEY, []).find(x => x.id.toUpperCase() === id.toUpperCase() && phoneDigits(x.phone) && phoneDigits(x.phone) === phoneDigits(phone));
         return c ? view(c) : null;
     },
@@ -565,7 +600,11 @@ const Store = {
     },
     // เคสทั้งหมดของผู้ใช้คนนี้ (ใหม่สุดก่อน)
     async mine(user) {
-        if (API_URL) { const r = await (await fetch(`${API_URL}?action=mine&user=${encodeURIComponent(user.username)}&token=${encodeURIComponent(user.token || '')}`)).json(); return r.ok ? r.data : []; }
+        if (API_URL) {   // ผิดพลาด = โยน error (ห้ามคืนรายการว่าง ไม่งั้นหน้าจอจะเหมือนเคสหายไปทั้งหมด)
+            const r = await fetchJson(`${API_URL}?action=mine&user=${encodeURIComponent(user.username)}&token=${encodeURIComponent(user.token || '')}`, null, 15000, 1);
+            if (!r.ok) throw new Error(r.error || 'mine failed');
+            return r.data;
+        }
         return readJSON(KEY, []).filter(c => c.owner === user.username).map(view);
     }
 };
@@ -630,11 +669,20 @@ createApp({
         mineFiltered() { return this.mineFilter ? this.mine.filter(c => c.status === this.mineFilter) : this.mine; },
         pendingCount() { return this.mine.filter(c => this.needsDecision(c) || this.pendingAddons(c) > 0).length; }
     },
+    created() {   // ตัวโหลดข้อมูลแบบทีละคำขอ (ทิ้งผลเก่าที่มาช้ากว่าคำสั่งใหม่)
+        this.mineLoader = singleFlight(
+            () => (this.user ? Store.mine(this.user) : Promise.resolve(null)),
+            res => { if (res.value && this.user) this.mine = res.value; else if (res.error) console.error(res.error); });
+        this.trackLoader = singleFlight(
+            () => { const id = this.track.id.trim(), phone = this.track.phone; return Store.track(id, phone).then(r => ({ key: id + '|' + phone, r })); },
+            (res, loud) => this.applyTrack(res, loud));
+    },
     mounted() {   // กลับมาที่หน้าเดิมถ้ายังไม่ปิดแท็บ
         try {
             const u = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
             if (u && u.username) { this.user = u; this.currentView = 'home'; this.loadMine(); this.startTimer(); }
         } catch (e) { /* ไม่มี session */ }
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) this.refreshNow(); });   // สลับกลับมาที่แท็บนี้ → อัปเดตทันที
     },
     methods: {
         baht(n) { return '฿ ' + Number(n || 0).toLocaleString('th-TH'); },
@@ -731,19 +779,21 @@ createApp({
             this.authBusy = false;
         },
         logout() {
-            clearInterval(this.timer); this.timer = null; this.user = null; this.mine = [];
+            clearTimeout(this.timer); this.timer = null; this.user = null; this.mine = [];
             try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
             this.track = { id:'', phone:'', result:null, error:'', pick:'', busy:false, showOffers:false, fromHome:false };
             this.currentView = 'login';
         },
         // ----- หน้าหลัก -----
-        async loadMine() { if (!this.user) return; try { this.mine = await Store.mine(this.user); } catch (e) { console.error(e); } },
-        startTimer() {   // อัปเดตสถานะเคสจากร้านทุก 5 วินาที
-            clearInterval(this.timer);
-            this.timer = setInterval(() => {
-                if (this.currentView === 'home' && this.user) this.loadMine();
-                else if (this.currentView === 'track' && this.track.result && !this.track.busy) this.loadTrack();   // รวมลูกค้าที่ไม่ได้ล็อกอิน เพื่อให้เห็นข้อความจากร้านทันที
-            }, 5000);
+        loadMine(quiet) { return this.user ? this.mineLoader(quiet) : Promise.resolve(); },   // quiet = โพลล์เบื้องหลัง (ไม่แจ้ง error)
+        refreshNow() {   // รวมลูกค้าที่ไม่ได้ล็อกอิน เพื่อให้เห็นข้อความจากร้านทันที
+            if (this.currentView === 'home' && this.user) this.loadMine(true);
+            else if (this.currentView === 'track' && this.track.result && !this.track.busy) this.loadTrack(true);
+        },
+        startTimer() {   // อัปเดตสถานะเคสจากร้านเป็นรอบๆ — หยุดเมื่อแท็บถูกซ่อน และไม่ยิงคำขอซ้อนกัน
+            clearTimeout(this.timer);
+            const tick = () => { if (!document.hidden) this.refreshNow(); this.timer = setTimeout(tick, POLL_MS); };
+            this.timer = setTimeout(tick, POLL_MS);
         },
         toHome() { this.currentView = 'home'; this.loadMine(); },
         newCase() { this.form = blankForm(this.user); this.currentView = 'form'; },
@@ -774,15 +824,18 @@ createApp({
             this.track.result = null; this.track.error = ''; this.track.pick = ''; this.track.showOffers = false;
             await this.loadTrack();
         },
-        async loadTrack() {   // ดึงสถานะล่าสุด (ไม่ล้างผลเดิม เพื่อไม่ให้หน้ากระพริบ)
-            try {
-                const r = await Store.track(this.track.id.trim(), this.track.phone);
+        loadTrack(quiet) { return this.trackLoader(quiet); },   // ดึงสถานะล่าสุด (ไม่ล้างผลเดิม เพื่อไม่ให้หน้ากระพริบ) · quiet = โพลล์เบื้องหลัง
+        applyTrack(res, loud) {
+            if (res.value) {
+                const { key, r } = res.value;
+                if (this.currentView !== 'track' || key !== this.track.id.trim() + '|' + this.track.phone) return;   // ผู้ใช้เปิดเคสอื่น/ออกจากหน้านี้แล้ว
                 if (r) {
                     this.track.result = r; this.track.error = '';
                     const keep = (r.offers || []).some(o => o.id === this.track.pick);
                     this.track.pick = r.chosen || (keep ? this.track.pick : '');
-                } else this.track.error = 'ไม่พบเคส กรุณาตรวจสอบรหัสเคสและเบอร์โทร';
-            } catch (e) { this.track.error = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่'; }
+                } else if (loud) this.track.error = 'ไม่พบเคส กรุณาตรวจสอบรหัสเคสและเบอร์โทร';
+            } else if (loud) this.track.error = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่';
+            else console.error(res.error);   // โพลล์เบื้องหลังสะดุด: เงียบไว้ ใช้ข้อมูลเดิมต่อ แล้วรอบหน้าลองใหม่
         },
         openDelivery() {   // หน้าเลือกวิธีส่งเครื่อง + ที่อยู่/แผนที่ร้าน (ค่าที่เลือกไว้ล่าสุดของเคส)
             this.delivery = { show: true, method: (this.track.result && this.track.result.delivery_method) || '', copied: false };
