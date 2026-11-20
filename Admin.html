@@ -346,7 +346,7 @@
                                     <!-- ข้อความกับลูกค้า -->
                                     <div>
                                         <h4 class="font-semibold mb-2 text-gray-700"><i class="fas fa-comment-dots"></i> ข้อความกับลูกค้า <span class="text-xs font-normal text-gray-500">· ลูกค้าเห็นและตอบกลับได้ในหน้า "รายละเอียดเคส" ของหน้าบ้าน เช่น แจ้งราคา / ระยะเวลาซ่อม</span> <span v-if="awaiting(c)" class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">ลูกค้าส่งข้อความ รอตอบ</span></h4>
-                                        <chat-thread :msgs="msgs(c)" me="admin" :send="t => sendMsg(c, t)" height="h-56"></chat-thread>
+                                        <chat-thread :msgs="msgs(c)" me="admin" :send="(t, id) => sendMsg(c, t, id)" height="h-56"></chat-thread>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2 border-t pt-4">
                                         <button v-if="c.status !== 'รออะไหล่'" @click="setStatus(c, 'รออะไหล่')" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">รออะไหล่</button>
@@ -500,7 +500,7 @@
                                 </div>
                                 <button @click="chatId = ''" class="text-gray-400 hover:text-gray-600" title="ปิด"><i class="fas fa-times"></i></button>
                             </div>
-                            <chat-thread :msgs="msgs(chatCurrent)" me="admin" :send="t => sendMsg(chatCurrent, t)" height="h-72"></chat-thread>
+                            <chat-thread :msgs="msgs(chatCurrent)" me="admin" :send="(t, id) => sendMsg(chatCurrent, t, id)" height="h-72"></chat-thread>
                         </div>
                     </div>
                     </transition>
@@ -653,7 +653,7 @@
 // วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
 const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
 const KEY = 'repair_cases', INV_KEY = 'repair_inv';
-const APP_VERSION = '1.0.5';
+const APP_VERSION = '1.0.6';
 // สถานะการซ่อม -> สีแถบสัดส่วน / สีป้ายสถานะ
 const STATUSES = [
     { key: 'รอรับงาน', bar: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
@@ -714,12 +714,18 @@ async function fetchJson(url, opts, ms, retries) {
 }
 const post = p => fetchJson(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p) }, 40000, 0);
 const get = (q, token) => fetchJson(`${API_URL}?${q}&token=${encodeURIComponent(token)}`, null, 15000, 1);
-const POLL_MS = 6000;   // ความถี่ดึงเคสใหม่ (Apps Script ตอบ ~1.5-3 วินาที/ครั้ง จึงไม่ควรถี่กว่านี้)
+// รอบดึงเคสใหม่ (นับจากต้นรอบ · Apps Script ตอบ ~1.5-3 วินาที/ครั้ง): เร็วเมื่อมีคนใช้งาน · ช้ามากเมื่อไม่มีใครแตะหน้าจอเกิน 10 นาที
+const POLL_FAST_MS = 3000, POLL_IDLE_MS = 20000, IDLE_AFTER_MS = 10 * 60 * 1000;
+let lastActive = Date.now();
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
 // ข้อความในเคส: messages = [{ id, from: 'admin'|'customer', text, at }] — เคสเก่าที่มีแค่ admin_note จะแสดงเป็นข้อความแรกจากร้าน
 const thread = c => {
     let m = c.messages;
     if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { m = []; } }
-    if (Array.isArray(m) && m.length) return m;
+    if (Array.isArray(m) && m.length) {   // ตัดข้อความซ้ำตามรหัส (กรณีกดส่งใหม่หลังเครือข่ายหลุดทั้งที่ข้อความถึงเซิร์ฟเวอร์แล้ว)
+        const seen = new Set();
+        return m.filter(x => { if (!x.id) return true; if (seen.has(x.id)) return false; seen.add(x.id); return true; });
+    }
     return c.admin_note ? [{ id: 'M-LEGACY', from: 'admin', text: c.admin_note, at: c.note_date || '' }] : [];
 };
 const newMsgId = () => 'M-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
@@ -815,32 +821,56 @@ const Store = {
 // กล่องแชทต่อเคส: me = 'admin' | 'customer' · send(text) ต้องคืนค่า Promise<boolean> (false = ส่งไม่สำเร็จ จะคงข้อความที่พิมพ์ไว้)
 const ChatThread = {
     props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' } },
-    data() { return { text: '', sending: false }; },
-    watch: { 'msgs.length'() { this.toBottom(); } },
+    data() { return { text: '', pending: [] }; },
+    computed: {
+        // ข้อความที่ยืนยันแล้ว + ข้อความที่กำลังส่ง (แสดงทันทีโดยไม่ต้องรอเซิร์ฟเวอร์) · ตัดข้อความซ้ำตามรหัส
+        shown() {
+            const seen = new Set(), list = [];
+            for (const m of this.msgs) { if (m.id) { if (seen.has(m.id)) continue; seen.add(m.id); } list.push(m); }
+            for (const p of this.pending) if (!seen.has(p.id)) list.push(p);
+            return list;
+        }
+    },
+    watch: { 'shown.length'() { this.toBottom(); } },
+    created() { this.chain = Promise.resolve(); },
     mounted() { this.toBottom(); },
     methods: {
         toBottom() { this.$nextTick(() => { const el = this.$refs.box; if (el) el.scrollTop = el.scrollHeight; }); },
         fmt(at) { const d = new Date(at); return isNaN(d) ? String(at || '') : d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }); },
         who(m) { return m.from === 'admin' ? 'ร้าน' : (this.me === 'customer' ? 'คุณ' : 'ลูกค้า'); },
-        async submit() {
-            const t = this.text.trim(); if (!t || this.sending) return;
-            this.sending = true;
-            try { if ((await this.send(t)) !== false) this.text = ''; } finally { this.sending = false; }
+        submit() {   // แสดงข้อความทันที แล้วส่งในพื้นหลัง (ไม่ต้องรอเซิร์ฟเวอร์ตอบ)
+            const t = this.text.trim(); if (!t) return;
+            this.pending.push({ id: newMsgId(), from: this.me, text: t, at: new Date().toISOString(), state: 'sending' });
+            this.text = '';
+            this.deliver(this.pending[this.pending.length - 1]);   // ใช้ตัวที่ผ่าน reactive แล้ว เพื่อให้สถานะอัปเดตบนหน้าจอ
         },
+        deliver(p) {   // ส่งทีละข้อความตามลำดับ (กันข้อความสลับลำดับ)
+            p.state = 'sending';
+            this.chain = this.chain.then(async () => {
+                let ok = false;
+                try { ok = (await this.send(p.text, p.id)) !== false; } catch (e) { ok = false; }
+                p.state = ok ? 'sent' : 'failed';
+                if (ok) setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);   // ข้อความจริงจากเซิร์ฟเวอร์ปรากฏแล้ว ล้างตัวชั่วคราวทิ้ง
+            });
+        },
+        retry(p) { this.deliver(p); },
+        discard(p) { this.pending = this.pending.filter(x => x !== p); },
         onEnter(e) { if (e.shiftKey || e.isComposing) return; e.preventDefault(); this.submit(); }
     },
     template: `
         <div>
             <div ref="box" :class="height" class="overflow-y-auto bg-gray-50 border rounded p-3 space-y-2">
-                <p v-if="!msgs.length" class="text-center text-sm text-gray-400 py-6">ยังไม่มีข้อความ พิมพ์ข้อความเพื่อเริ่มสนทนาได้เลย</p>
-                <div v-for="(m, i) in msgs" :key="m.id || i" :class="m.from === me ? 'items-end' : 'items-start'" class="flex flex-col">
+                <p v-if="!shown.length" class="text-center text-sm text-gray-400 py-6">ยังไม่มีข้อความ พิมพ์ข้อความเพื่อเริ่มสนทนาได้เลย</p>
+                <div v-for="(m, i) in shown" :key="m.id || i" :class="m.from === me ? 'items-end' : 'items-start'" class="flex flex-col">
                     <span class="text-[11px] text-gray-400 mb-0.5">{{ who(m) }} · {{ fmt(m.at) }}</span>
-                    <div :class="m.from === me ? 'bg-blue-600 text-white' : 'bg-white border text-gray-800'" class="px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-line break-words text-sm">{{ m.text }}</div>
+                    <div :class="m.from === me ? 'bg-blue-600 text-white' : 'bg-white border text-gray-800'" :style="m.state === 'sending' ? 'opacity:.6' : ''" class="px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-line break-words text-sm">{{ m.text }}</div>
+                    <span v-if="m.state === 'sending'" class="text-[11px] text-gray-400 mt-0.5"><i class="fas fa-circle-notch fa-spin"></i> กำลังส่ง...</span>
+                    <span v-else-if="m.state === 'failed'" class="text-[11px] text-red-500 mt-0.5">ส่งไม่สำเร็จ · <button type="button" class="underline" @click="retry(m)">ส่งใหม่</button> · <button type="button" class="underline" @click="discard(m)">ลบ</button></span>
                 </div>
             </div>
             <div class="flex gap-2 mt-2">
                 <textarea v-model="text" @keydown.enter="onEnter" rows="2" maxlength="1000" placeholder="พิมพ์ข้อความ (Enter = ส่ง · Shift+Enter = ขึ้นบรรทัดใหม่)" class="flex-1 p-2 border rounded text-sm resize-none"></textarea>
-                <button @click="submit" :disabled="!text.trim() || sending" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700 disabled:opacity-40" title="ส่งข้อความ"><i class="fas fa-paper-plane"></i></button>
+                <button @click="submit" :disabled="!text.trim()" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700 disabled:opacity-40" title="ส่งข้อความ"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>`
 };
@@ -927,14 +957,18 @@ createApp({
                 }
             } finally { this.loadP = null; }
         },
-        startPolling() {   // ดึงเคสใหม่จากหน้าบ้านเป็นรอบๆ — หยุดเมื่อแท็บถูกซ่อน และไม่ยิงคำขอซ้อนกัน
+        startPolling() {   // ดึงเคสใหม่จากหน้าบ้านเป็นรอบๆ — หยุดเมื่อแท็บถูกซ่อน · ไม่ยิงคำขอซ้อนกัน · นับเวลาจากต้นรอบ
             clearTimeout(this.timer);
+            const gen = this.pollGen = (this.pollGen || 0) + 1;
             const tick = async () => {
-                if (this.currentView === 'admin-login') return;
+                if (gen !== this.pollGen || this.currentView === 'admin-login') return;
+                const t0 = Date.now();
                 if (!document.hidden) await this.load();
-                this.timer = setTimeout(tick, POLL_MS);
+                if (gen !== this.pollGen || this.currentView === 'admin-login') return;
+                const every = Date.now() - lastActive > IDLE_AFTER_MS ? POLL_IDLE_MS : POLL_FAST_MS;
+                this.timer = setTimeout(tick, Math.max(500, every - (Date.now() - t0)));
             };
-            this.timer = setTimeout(tick, POLL_MS);
+            this.timer = setTimeout(tick, POLL_FAST_MS);
         },
         async adminLogin() {
             const staff = STAFF.find(s => s.username === this.adminUser && s.password === this.adminPass);
@@ -947,7 +981,7 @@ createApp({
                 this.startPolling();
             } else { this.loginError = 'Username หรือ Password ไม่ถูกต้อง!'; }
         },
-        logout() { clearTimeout(this.timer); this.currentView = 'admin-login'; this.adminPass = ''; this.chatId = ''; },
+        logout() { this.pollGen = (this.pollGen || 0) + 1; clearTimeout(this.timer); this.currentView = 'admin-login'; this.adminPass = ''; this.chatId = ''; },
         async setStatus(c, status) { c.status = status; await Store.setStatus(c.id, status, this.adminPass); },
         acceptCase(c) { this.setStatus(c, 'กำลังดำเนินการ'); this.adminTab = 'process'; },
         photos(c) {
@@ -1114,11 +1148,11 @@ createApp({
         msgs(c) { return thread(c); },
         awaiting(c) { const t = thread(c); return t.length > 0 && t[t.length - 1].from === 'customer'; },
         openChat(c) { this.chatId = c.id; },
-        async sendMsg(c, text) {   // คืน false = ส่งไม่สำเร็จ (กล่องแชทจะคงข้อความที่พิมพ์ไว้)
+        async sendMsg(c, text, id) {   // คืน false = ส่งไม่สำเร็จ (กล่องแชทจะขึ้น "ส่งไม่สำเร็จ · ส่งใหม่" ให้เอง) · id = รหัสข้อความที่กล่องแชทแสดงไว้ทันทีแล้ว
             const t = String(text || '').trim(); if (!t) return false;
-            try { await Store.addMessage(c.id, { id: newMsgId(), from: 'admin', text: t, at: new Date().toISOString() }, this.adminPass); }
-            catch (e) { alert('ส่งข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); return false; }
-            await this.load();
+            try { await Store.addMessage(c.id, { id: id || newMsgId(), from: 'admin', text: t, at: new Date().toISOString() }, this.adminPass); }
+            catch (e) { return false; }
+            this.load();   // ดึงข้อความจริงมาแทนตัวชั่วคราว (ไม่ต้องรอ)
             return true;
         },
         saveInv() {
