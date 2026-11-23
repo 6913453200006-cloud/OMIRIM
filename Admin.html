@@ -96,12 +96,13 @@
                     <div class="p-4 text-center border-b border-blue-400"><div class="font-bold text-2xl tracking-[0.3em]">OMIRIM</div><div class="text-[11px] leading-tight text-blue-100 mt-1">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div><div class="text-xs text-blue-200 mt-2">Admin System</div></div>
                     <nav class="flex-1 p-4 space-y-2">
                         <a href="#" @click.prevent="adminTab = 'dashboard'" :class="{'bg-blue-700': adminTab === 'dashboard'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-chart-line w-6"></i> 1. แดชบอร์ด <span v-if="awaitCount" class="ml-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full" title="ลูกค้าส่งข้อความรอตอบ">{{ awaitCount }}</span></a>
-                        <a href="#" @click.prevent="adminTab = 'received'" :class="{'bg-blue-700': adminTab === 'received'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-inbox w-6"></i> 2. เคสงานใหม่ ({{ cases.filter(c => c.status === 'รอรับงาน').length }})</a>
+                        <a href="#" @click.prevent="adminTab = 'received'" :class="{'bg-blue-700': adminTab === 'received'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-inbox w-6"></i> 2. เคสงานใหม่ ({{ cases.filter(c => c.status === 'รอรับงานซ่อม').length }})</a>
                         <a href="#" @click.prevent="adminTab = 'process'" :class="{'bg-blue-700': adminTab === 'process'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-tools w-6"></i> 3. กำลังดำเนินการ ({{ processCases.length }})</a>
                         <a href="#" @click.prevent="adminTab = 'inventory'" :class="{'bg-blue-700': adminTab === 'inventory'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-boxes w-6"></i> 4. คลังสินค้า</a>
                         <a href="#" @click.prevent="adminTab = 'accounting'" :class="{'bg-blue-700': adminTab === 'accounting'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-file-invoice-dollar w-6"></i> 5. รายการบัญชี</a>
                     </nav>
                     <div class="p-4 pb-10 border-t border-blue-400">
+                        <p v-if="fbEnabled" class="text-[11px] mb-1" :class="fbOnline ? 'text-green-200' : 'text-yellow-200'"><i class="fas fa-bolt"></i> {{ fbOnline ? 'แชทสด: เชื่อมต่อแล้ว' : 'แชทสด: ยังไม่เชื่อมต่อ' }}</p>
                         <p class="text-[11px] mb-2" :class="syncError ? 'text-yellow-200' : 'text-blue-200'"><i class="fas fa-rotate"></i> {{ syncError ? 'เชื่อมต่อไม่ได้ — แสดงข้อมูลเดิม (ลองใหม่อัตโนมัติ)' : (lastSync ? 'ซิงค์ล่าสุด ' + lastSync : 'กำลังโหลด...') }}</p>
                         <button @click="logout()" class="w-full text-left text-blue-100 hover:text-white"><i class="fas fa-sign-out-alt w-6"></i> ออกจากระบบ</button>
                     </div>
@@ -124,35 +125,9 @@
                                 <h4 class="text-gray-500 text-sm">เคสทั้งหมด</h4>
                                 <p class="text-3xl font-bold">{{ cases.length }}</p>
                             </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-yellow-500">
-                                <h4 class="text-gray-500 text-sm">งานค้าง (รอรับ)</h4>
-                                <p class="text-3xl font-bold">{{ cases.filter(c => c.status === 'รอรับงาน').length }}</p>
-                            </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-orange-500">
-                                <h4 class="text-gray-500 text-sm">กำลังดำเนินการ</h4>
-                                <p class="text-3xl font-bold">{{ cases.filter(c => c.status === 'กำลังดำเนินการ').length }}</p>
-                            </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-sky-500">
-                                <h4 class="text-gray-500 text-sm">รออะไหล่</h4>
-                                <p class="text-3xl font-bold">{{ cases.filter(c => c.status === 'รออะไหล่').length }}</p>
-                            </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-green-500">
-                                <h4 class="text-gray-500 text-sm">งานเสร็จแล้ว</h4>
-                                <p class="text-3xl font-bold">{{ cases.filter(c => c.status === 'เสร็จสิ้น').length }}</p>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-3 gap-6">
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-indigo-500">
-                                <h4 class="text-gray-500 text-sm">รายรับ (ยอดขายงานที่เสร็จแล้ว)</h4>
-                                <p class="text-2xl font-bold text-indigo-600">{{ baht(accTotals.sale) }}</p>
-                            </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-red-500">
-                                <h4 class="text-gray-500 text-sm">รายจ่าย (ต้นทุน)</h4>
-                                <p class="text-2xl font-bold text-red-600">{{ baht(accTotals.cost) }}</p>
-                            </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-green-600">
-                                <h4 class="text-gray-500 text-sm">กำไร</h4>
-                                <p class="text-2xl font-bold" :class="accTotals.profit < 0 ? 'text-red-600' : 'text-green-600'">{{ baht(accTotals.profit) }}</p>
+                            <div v-for="s in statusSummary" :key="s.key" :class="s.bar.replace('bg-', 'border-')" class="bg-white p-6 rounded shadow border-l-4">
+                                <h4 class="text-gray-500 text-sm">{{ s.key }}</h4>
+                                <p class="text-3xl font-bold">{{ s.count }}</p>
                             </div>
                         </div>
 
@@ -219,7 +194,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="c in cases.filter(c => c.status === 'รอรับงาน')" class="border-b hover:bg-gray-50">
+                                    <tr v-for="c in cases.filter(c => c.status === 'รอรับงานซ่อม')" class="border-b hover:bg-gray-50">
                                         <td class="p-4">{{ c.id }}</td>
                                         <td class="p-4">{{ c.name }} <br><span class="text-xs text-gray-500">{{ c.phone }}</span></td>
                                         <td class="p-4">{{ c.model }} ({{ c.color }})</td>
@@ -228,12 +203,13 @@
                                         <td class="p-4">
                                             <button @click="acceptCase(c)" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">รับงาน (ส่งไปส่วนที่ 3)</button>
                                             <button @click="cancelCase(c)" class="ml-2 border border-red-300 text-red-600 px-3 py-1 rounded text-sm hover:bg-red-50"><i class="fas fa-ban"></i> ยกเลิก</button>
+                                            <button @click="photoId = c.id" class="ml-2 bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"><i class="fas fa-images"></i> ดูรูป ({{ photos(c).length }})</button>
                                             <div class="mt-2 text-xs text-gray-600">ช่องทางส่งเครื่อง: {{ deliveryLabel(c) }}</div>
-                                            <div class="mt-1"><span v-if="c.received_at" class="text-xs text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span><button v-else @click="markReceived(c)" class="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"><i class="fas fa-box-open"></i> รับเครื่องแล้ว</button></div>
+                                            <div class="mt-1"><span v-if="c.received_at" class="text-xs text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span></div>
                                             <button @click="openChat(c)" :class="awaiting(c) ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white text-blue-600 border-blue-200'" class="ml-2 border px-2 py-1 rounded text-sm hover:bg-blue-50 whitespace-nowrap"><i class="fas fa-comments"></i> {{ msgs(c).length || '' }}<span v-if="awaiting(c)"> · รอตอบ</span></button>
                                         </td>
                                     </tr>
-                                    <tr v-if="cases.filter(c => c.status === 'รอรับงาน').length === 0">
+                                    <tr v-if="cases.filter(c => c.status === 'รอรับงานซ่อม').length === 0">
                                         <td colspan="6" class="p-6 text-center text-gray-500">ไม่มีเคสงานใหม่</td>
                                     </tr>
                                 </tbody>
@@ -252,7 +228,7 @@
                                         <p><i class="fas fa-user w-5"></i>{{ c.name }} <span v-if="c.nickname">({{ c.nickname }})</span> · <i class="fas fa-phone w-5"></i>{{ c.phone }} <span v-if="c.email">· {{ c.email }}</span></p>
                                         <p><i class="fas fa-mobile-alt w-5"></i>{{ c.model }} · สี {{ c.color || '-' }} · โมเดล {{ c.model_number || '-' }}</p>
                                         <p><i class="fas fa-lock w-5"></i>รหัสผ่านหน้าจอ: <b>{{ c.screen_password || '-' }}</b></p>
-                                        <p><i class="fas fa-truck w-5"></i>ช่องทางส่งเครื่อง: {{ deliveryLabel(c) }} · <span v-if="c.received_at" class="text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span><button v-else @click="markReceived(c)" class="ml-2 bg-green-600 text-white px-2 py-0.5 rounded text-xs hover:bg-green-700">รับเครื่องแล้ว</button></p>
+                                        <p><i class="fas fa-truck w-5"></i>ช่องทางส่งเครื่อง: {{ deliveryLabel(c) }} · <span v-if="c.received_at" class="text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span><button v-else-if="c.delivery_method" @click="markReceived(c)" class="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"><i class="fas fa-box-open"></i> รับเครื่องแล้ว</button><span v-else class="ml-2 text-xs text-gray-500">รอลูกค้าเลือกวิธีส่งเครื่อง</span><button v-if="c.received_at" @click="unmarkReceived(c)" class="ml-2 text-xs text-red-500 underline">ยกเลิก (กดผิด)</button></p>
                                     </div>
                                     <span :class="badge(c.status)" class="px-3 py-1 rounded-full text-sm">{{ c.status }}</span>
                                 </div>
@@ -318,16 +294,14 @@
                                     </div>
                                     <!-- งานซ่อมเพิ่มเติม (ระหว่างซ่อม: เสนอได้เมื่อลูกค้ายืนยันซ่อมแล้ว) -->
                                     <div v-if="c.decision === 'accept'">
-                                        <h4 class="font-semibold mb-2 text-amber-600"><i class="fas fa-screwdriver-wrench"></i> เสนองานซ่อมเพิ่มเติม (ระหว่างซ่อม) <span class="text-xs font-normal text-gray-500">· ลูกค้าเห็นและกดรับ/ไม่รับในหน้า "รายละเอียดเคส" · รับแล้วระบบจะตัดสต็อกและรวมในใบเบิก/ใบเสร็จเมื่อซ่อมเสร็จ</span></h4>
+                                        <h4 class="font-semibold mb-2 text-amber-600"><i class="fas fa-screwdriver-wrench"></i> เสนองานซ่อมเพิ่มเติม (ระหว่างซ่อม) <span class="text-xs font-normal text-gray-500">· เพิ่มเข้าบิลได้เลย ไม่ต้องรอลูกค้ายืนยัน · รวมในใบเสร็จ (ไม่รวมในใบแจ้งซ่อมก่อนซ่อม) · ตัดสต็อกและออกใบเบิกเมื่อซ่อมเสร็จ</span></h4>
                                         <div class="bg-amber-50 p-3 rounded text-sm space-y-3">
                                             <div v-if="(c.addons || []).length" class="space-y-1">
                                                 <div v-for="a in c.addons" :key="a.id" class="flex items-center justify-between gap-2 py-1 border-b last:border-0">
                                                     <span class="flex-1">{{ a.category }} · {{ a.type }} · {{ a.model }}</span>
                                                     <span class="text-xs text-gray-500 whitespace-nowrap">ขาย {{ baht(a.price) }} · ทุน {{ baht(a.cost) }}</span>
-                                                    <span v-if="a.decision === 'accept'" class="text-xs text-green-600 font-semibold whitespace-nowrap"><i class="fas fa-check-circle"></i> ลูกค้ารับแล้ว ({{ a.decision_date }})</span>
-                                                    <span v-else-if="a.decision === 'decline'" class="text-xs text-red-600 font-semibold whitespace-nowrap"><i class="fas fa-times-circle"></i> ลูกค้าไม่รับ ({{ a.decision_date }})</span>
-                                                    <span v-else class="text-xs text-gray-500 whitespace-nowrap"><i class="fas fa-hourglass-half"></i> รอลูกค้าตัดสินใจ ({{ a.offer_date }})</span>
-                                                    <button v-if="!a.decision" @click="removeAddon(c, a)" class="text-red-400 hover:text-red-600" title="ลบข้อเสนอที่ลูกค้ายังไม่ได้ตอบ"><i class="fas fa-trash"></i></button>
+                                                    <span class="text-xs text-green-600 font-semibold whitespace-nowrap"><i class="fas fa-check-circle"></i> เพิ่มในบิลแล้ว ({{ a.offer_date }})</span>
+                                                    <button @click="removeAddon(c, a)" class="text-red-400 hover:text-red-600" title="ลบรายการนี้ออกจากบิล"><i class="fas fa-trash"></i></button>
                                                 </div>
                                             </div>
                                             <div v-for="g in stockCheck(c, true)" :key="g.category">
@@ -337,7 +311,7 @@
                                                     <span class="flex items-center gap-2">
                                                         <input type="number" min="0" placeholder="ต้นทุน" title="ต้นทุน (บาท) — ลูกค้าไม่เห็น" :value="addonVal(c, g.category, t.type, 'cost')" @input="setAddonVal(c, g.category, t.type, 'cost', $event.target.value)" class="w-24 p-1 border rounded text-right">
                                                         <input type="number" min="0" placeholder="ราคาขาย" title="ราคาขายให้ลูกค้า (บาท)" :value="addonVal(c, g.category, t.type, 'price')" @input="setAddonVal(c, g.category, t.type, 'price', $event.target.value)" class="w-24 p-1 border rounded text-right">
-                                                        <button @click="addAddon(c, g.category, t.type)" class="bg-amber-500 text-white px-3 py-1 rounded text-xs hover:bg-amber-600">+ เสนอเพิ่ม</button>
+                                                        <button @click="addAddon(c, g.category, t.type)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">+ เพิ่มในบิล</button>
                                                     </span>
                                                 </div>
                                             </div>
@@ -346,12 +320,12 @@
                                     <!-- ข้อความกับลูกค้า -->
                                     <div>
                                         <h4 class="font-semibold mb-2 text-gray-700"><i class="fas fa-comment-dots"></i> ข้อความกับลูกค้า <span class="text-xs font-normal text-gray-500">· ลูกค้าเห็นและตอบกลับได้ในหน้า "รายละเอียดเคส" ของหน้าบ้าน เช่น แจ้งราคา / ระยะเวลาซ่อม</span> <span v-if="awaiting(c)" class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">ลูกค้าส่งข้อความ รอตอบ</span></h4>
-                                        <chat-thread :msgs="msgs(c)" me="admin" :send="(t, id) => sendMsg(c, t, id)" height="h-56"></chat-thread>
+                                        <chat-thread :msgs="msgs(c)" me="admin" :send="(t, id) => sendMsg(c, t, id)" :room="rooms[c.id] || ''" @live="l => mergeLive(c.id, l)" height="h-56"></chat-thread>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2 border-t pt-4">
-                                        <button v-if="c.status !== 'รออะไหล่'" @click="setStatus(c, 'รออะไหล่')" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">รออะไหล่</button>
-                                        <button v-else @click="setStatus(c, 'กำลังดำเนินการ')" class="bg-orange-500 text-white px-4 py-2 rounded text-sm hover:bg-orange-600"><i class="fas fa-rotate-left"></i> กลับมากำลังดำเนินการ</button>
-                                        <button @click="completeCase(c)" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"><i class="fas fa-check"></i> ซ่อมเสร็จสิ้น</button>
+                                        <button v-if="c.status !== 'รออะไหล่'" @click="setStatus(c, 'รออะไหล่')" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">รออะไหล่</button>
+                                        <button v-else @click="setStatus(c, 'กำลังดำเนินการ')" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-600"><i class="fas fa-rotate-left"></i> กลับมากำลังดำเนินการ</button>
+                                        <button @click="completeCase(c)" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-600"><i class="fas fa-check"></i> ซ่อมเสร็จสิ้น</button>
                                         <button @click="cancelCase(c)" class="border border-red-400 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-50"><i class="fas fa-ban"></i> ยกเลิกงานซ่อม</button>
                                         <span class="text-xs text-gray-500 pl-2">ซ่อมเสร็จ = ตัดสต็อกอะไหล่ทุกชิ้นที่ลูกค้ารับ (ชิ้นละ 1) + ออกใบเบิกสินค้าที่หน้า "5. รายการบัญชี"</span>
                                     </div>
@@ -500,11 +474,12 @@
                                 </div>
                                 <button @click="chatId = ''" class="text-gray-400 hover:text-gray-600" title="ปิด"><i class="fas fa-times"></i></button>
                             </div>
-                            <chat-thread :msgs="msgs(chatCurrent)" me="admin" :send="(t, id) => sendMsg(chatCurrent, t, id)" height="h-72"></chat-thread>
+                            <chat-thread :msgs="msgs(chatCurrent)" me="admin" :send="(t, id) => sendMsg(chatCurrent, t, id)" :room="rooms[chatCurrent.id] || ''" @live="l => mergeLive(chatCurrent.id, l)" height="h-72"></chat-thread>
                         </div>
                     </div>
                     </transition>
                     <!-- Modal: ขยายรูป -->
+                    <transition name="modal"><div v-if="photoCase" @click.self="photoId = ''" class="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4 no-print"><div class="bg-white rounded-lg w-full max-w-3xl p-5 modal-card max-h-full overflow-y-auto"><div class="flex justify-between items-center mb-3"><h3 class="font-bold"><i class="fas fa-images text-blue-600"></i> รูปจากลูกค้า · {{ photoCase.id }} · {{ photoCase.model }}</h3><button @click="photoId = ''" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button></div><div v-if="photos(photoCase).length" class="grid grid-cols-2 gap-3"><img v-for="(p, i) in photos(photoCase)" :key="i" :src="p" @click="zoom = p" class="h-48 w-full object-cover rounded border cursor-pointer hover:opacity-80"></div><p v-else class="text-sm text-gray-400">ไม่มีรูปแนบ</p><p v-if="photoCase.problem_desc" class="mt-3 text-sm"><b>อาการที่ลูกค้าแจ้ง:</b> {{ photoCase.problem_desc }}</p></div></div></transition>
                     <transition name="modal"><div v-if="zoom" @click="zoom = ''" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><img :src="zoom" class="max-h-full max-w-full rounded modal-card"></div></transition>
                     <!-- แจ้งเตือนสั้นๆ -->
                     <transition name="modal"><div v-if="toast" class="fixed bottom-6 right-6 z-50 bg-blue-700 text-white px-5 py-3 rounded shadow-lg text-sm max-w-sm no-print">{{ toast }}</div></transition>
@@ -653,12 +628,13 @@
 // วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
 const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
 const KEY = 'repair_cases', INV_KEY = 'repair_inv';
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.9';
+const normCase = c => (c && c.status === 'รอรับงาน' ? { ...c, status: 'รอรับงานซ่อม' } : c);
 // สถานะการซ่อม -> สีแถบสัดส่วน / สีป้ายสถานะ
 const STATUSES = [
-    { key: 'รอรับงาน', bar: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
+    { key: 'รอรับงานซ่อม', bar: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
     { key: 'กำลังดำเนินการ', bar: 'bg-orange-500', badge: 'bg-orange-100 text-orange-600' },
-    { key: 'รออะไหล่', bar: 'bg-sky-500', badge: 'bg-sky-100 text-sky-700' },
+    { key: 'รออะไหล่', hidden: true, bar: 'bg-sky-500', badge: 'bg-sky-100 text-sky-700' },
     { key: 'เสร็จสิ้น', bar: 'bg-green-500', badge: 'bg-green-100 text-green-700' },
     { key: 'ยกเลิก', bar: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
 ];
@@ -680,10 +656,10 @@ const IOS = [
                         'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 18', 'iPhone 18 Pro', 'iPhone 18 Pro Max'
                     ];
 const SEED = [
-                        { id: 'C-001', name: 'สมชาย ใจดี', nickname: 'ชาย', phone: '0812345678', model: 'iPhone 13 Pro', color: 'Blue', problem: 'หน้าจอเสีย', problem_desc: 'จอแตกมุมขวา', date: '2023-10-01', status: 'เสร็จสิ้น',
+                        { id: 'OMP-0001', name: 'สมชาย ใจดี', nickname: 'ชาย', phone: '0812345678', model: 'iPhone 13 Pro', color: 'Blue', problem: 'หน้าจอเสีย', problem_desc: 'จอแตกมุมขวา', date: '2023-10-01', status: 'เสร็จสิ้น',
                           offers: [{ id: 'O-DEMO1', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', price: 4500, cost: 3200 }], offer_date: '2023-10-02', decision: 'accept', chosen: 'O-DEMO1', decision_date: '2023-10-02',
                           requisition: { id: 'RQ-DEMO1', at: '2023-10-03T10:30:00', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', qty: 1, item_id: 'INV-S01', cost: 3200, price: 4500, stock_before: 6, stock_after: 5, stock_cut: true, note: '' } },
-                        { id: 'C-002', name: 'สมหญิง รักสวย', nickname: 'หญิง', phone: '0898765432', model: 'iPhone 11', color: 'Black', problem: 'แบตเสียหาย', problem_desc: 'แบตบวมดันจอ', date: '2023-10-15', status: 'กำลังดำเนินการ' }
+                        { id: 'OMP-0002', name: 'สมหญิง รักสวย', nickname: 'หญิง', phone: '0898765432', model: 'iPhone 11', color: 'Black', problem: 'แบตเสียหาย', problem_desc: 'แบตบวมดันจอ', date: '2023-10-15', status: 'กำลังดำเนินการ' }
                     ];
 // อาการเสีย -> หมวดหมู่อะไหล่ที่ใช้เช็คคลัง ("อื่นๆ" = แสดงทุกหมวด)
 const PROBLEM_CAT = {
@@ -714,8 +690,70 @@ async function fetchJson(url, opts, ms, retries) {
 }
 const post = p => fetchJson(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p) }, 40000, 0);
 const get = (q, token) => fetchJson(`${API_URL}?${q}&token=${encodeURIComponent(token)}`, null, 15000, 1);
+// ===== แชทเรียลไทม์ผ่าน Firebase Realtime Database (REST + EventSource ไม่ต้องติดตั้ง SDK) =====
+// ปล่อยว่าง = ปิดระบบนี้ (แชทไปทาง Google Sheet อย่างเดียว) · ใส่ URL ของ Realtime Database เช่น https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
+// ข้อความขึ้นห้องแชทสดทันที แล้วบันทึกลง Google Sheet เบื้องหลังเป็นประวัติถาวร (ถ้า Firebase ใช้ไม่ได้ จะส่งผ่าน Sheet ตามเดิม)
+const FIREBASE_URL = '';
+const FB = {
+    on: () => !!FIREBASE_URL,
+    url: (path, query) => FIREBASE_URL.replace(/\/+$/, '') + '/' + path + '.json' + (query || ''),
+    // รหัสห้องแชท: คำนวณจากรหัสเคส + เบอร์โทร (SHA-256) — เดาไม่ได้ถ้าไม่รู้ทั้งสองอย่าง และใครก็ดูรายชื่อห้องทั้งหมดไม่ได้
+    async roomKey(id, phone) {
+        try {
+            const raw = 'omirim|' + String(id).toUpperCase() + '|' + String(phone == null ? '' : phone).replace(/\D/g, '');
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+            return 'r_' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+        } catch (e) { return ''; }   // เบราว์เซอร์ไม่รองรับ → ปิดแชทสดของเคสนี้ ใช้ Sheet แทน
+    },
+    async request(url, opts, ms) {
+        const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms || 10000);
+        try { return await fetch(url, { ...(opts || {}), signal: ctl.signal }); } finally { clearTimeout(timer); }
+    },
+    async get(path) { try { const r = await FB.request(FB.url(path)); return r.ok ? await r.json() : null; } catch (e) { return null; } },
+    // เขียนข้อความ (รหัสข้อความ = ชื่อคีย์ ส่งซ้ำจึงไม่เกิดข้อความซ้ำ) · ข้อความจากลูกค้าจะประกาศในช่องแจ้งเตือนของหลังบ้านด้วย
+    async put(room, m) {
+        try {
+            const path = 'chats/' + room + '/msgs/' + m.id;
+            const msg = FB.request(FB.url(path), { method: 'PUT', body: JSON.stringify({ from: m.from, text: m.text, at: m.at }) });
+            if (m.from === 'customer') FB.request(FB.url('activity/feed/' + m.id), { method: 'PUT', body: JSON.stringify({ room, from: 'customer', at: m.at }) }).catch(() => null);
+            const res = await msg;
+            if (res.ok) return true;
+            if (res.status === 401) {   // อาจมีข้อความรหัสนี้อยู่แล้ว (เคยส่งถึงแต่คำตอบหลุด) → ถ้าเนื้อหาตรงกันนับว่าสำเร็จ
+                const d = await FB.get(path);
+                if (d && d.text === m.text) return true;
+            }
+            return false;
+        } catch (e) { return false; }
+    },
+    // ฟังข้อมูลแบบสด (Server-Sent Events) → เรียก onData(ข้อมูลทั้งก้อน) ทุกครั้งที่เปลี่ยน · onStatus(true/false) = เชื่อมต่อได้/หลุด · คืนฟังก์ชันหยุดฟัง
+    listen(path, query, onData, onStatus) {
+        let state = null;
+        const setAt = (parts, val) => {
+            if (!parts.length) { state = val === undefined ? null : val; return; }
+            if (!state || typeof state !== 'object') state = {};
+            let o = state;
+            parts.slice(0, -1).forEach(k => { if (!o[k] || typeof o[k] !== 'object') o[k] = {}; o = o[k]; });
+            if (val === null || val === undefined) delete o[parts[parts.length - 1]]; else o[parts[parts.length - 1]] = val;
+        };
+        const apply = (ev, merge) => {
+            try {
+                const { path: p, data } = JSON.parse(ev.data), parts = String(p).split('/').filter(Boolean);
+                if (merge) Object.keys(data || {}).forEach(k => setAt(parts.concat(k.split('/').filter(Boolean)), data[k]));
+                else setAt(parts, data);
+                onData(state && typeof state === 'object' ? state : {});
+            } catch (e) { /* ข้อมูลไม่สมบูรณ์ ข้ามไป */ }
+        };
+        const es = new EventSource(FB.url(path, query));
+        es.onopen = () => { if (onStatus) onStatus(true); };
+        es.onerror = () => { if (onStatus) onStatus(false); };   // EventSource ต่อใหม่เองอัตโนมัติ
+        es.addEventListener('put', ev => apply(ev, false));
+        es.addEventListener('patch', ev => apply(ev, true));
+        es.addEventListener('cancel', () => { es.close(); if (onStatus) onStatus(false); });
+        return () => es.close();
+    }
+};
 // รอบดึงเคสใหม่ (นับจากต้นรอบ · Apps Script ตอบ ~1.5-3 วินาที/ครั้ง): เร็วเมื่อมีคนใช้งาน · ช้ามากเมื่อไม่มีใครแตะหน้าจอเกิน 10 นาที
-const POLL_FAST_MS = 3000, POLL_IDLE_MS = 20000, IDLE_AFTER_MS = 10 * 60 * 1000;
+const POLL_FAST_MS = 1500, POLL_IDLE_MS = 20000, IDLE_AFTER_MS = 10 * 60 * 1000;
 let lastActive = Date.now();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
 // ข้อความในเคส: messages = [{ id, from: 'admin'|'customer', text, at }] — เคสเก่าที่มีแค่ admin_note จะแสดงเป็นข้อความแรกจากร้าน
@@ -795,7 +833,7 @@ const Store = {
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (!c) throw new Error('case not found');
         const a = (c.addons || []).find(x => x.id === addonId);
-        if (a && a.decision) throw new Error('already decided');
+        
         c.addons = (c.addons || []).filter(x => x.id !== addonId);
         localStorage.setItem(KEY, JSON.stringify(l));
     },
@@ -820,19 +858,26 @@ const Store = {
 };
 // กล่องแชทต่อเคส: me = 'admin' | 'customer' · send(text) ต้องคืนค่า Promise<boolean> (false = ส่งไม่สำเร็จ จะคงข้อความที่พิมพ์ไว้)
 const ChatThread = {
-    props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' } },
-    data() { return { text: '', pending: [] }; },
+    props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' }, room: { type: String, default: '' } },
+    emits: ['live'],
+    data() { return { text: '', pending: [], live: [] }; },
     computed: {
         // ข้อความที่ยืนยันแล้ว + ข้อความที่กำลังส่ง (แสดงทันทีโดยไม่ต้องรอเซิร์ฟเวอร์) · ตัดข้อความซ้ำตามรหัส
-        shown() {
+        shown() {   // ข้อความจาก Sheet + จากแชทสด + ที่กำลังส่ง · ตัดซ้ำตามรหัส · เรียงตามเวลา (ข้อความจากแชทสดอาจมาก่อนที่ Sheet จะบันทึก)
             const seen = new Set(), list = [];
-            for (const m of this.msgs) { if (m.id) { if (seen.has(m.id)) continue; seen.add(m.id); } list.push(m); }
-            for (const p of this.pending) if (!seen.has(p.id)) list.push(p);
-            return list;
+            const add = m => { if (m.id) { if (seen.has(m.id)) return; seen.add(m.id); } list.push(m); };
+            this.msgs.forEach(add); this.live.forEach(add); this.pending.forEach(add);
+            const t = m => (/^\d{4}-\d\d-\d\dT/.test(String(m.at)) ? Date.parse(m.at) : NaN);
+            return list.sort((a, b) => { const x = t(a), y = t(b); return isNaN(x) || isNaN(y) ? 0 : x - y; });
         }
     },
-    watch: { 'shown.length'() { this.toBottom(); } },
+    watch: {
+        'shown.length'() { this.toBottom(); },
+        room: { immediate: true, handler(r) { this.subscribe(r); } },
+        live(l) { this.$emit('live', l); }
+    },
     created() { this.chain = Promise.resolve(); },
+    beforeUnmount() { this.unsubscribe(); },
     mounted() { this.toBottom(); },
     methods: {
         toBottom() { this.$nextTick(() => { const el = this.$refs.box; if (el) el.scrollTop = el.scrollHeight; }); },
@@ -847,12 +892,29 @@ const ChatThread = {
         deliver(p) {   // ส่งทีละข้อความตามลำดับ (กันข้อความสลับลำดับ)
             p.state = 'sending';
             this.chain = this.chain.then(async () => {
-                let ok = false;
-                try { ok = (await this.send(p.text, p.id)) !== false; } catch (e) { ok = false; }
-                p.state = ok ? 'sent' : 'failed';
-                if (ok) setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);   // ข้อความจริงจากเซิร์ฟเวอร์ปรากฏแล้ว ล้างตัวชั่วคราวทิ้ง
+                const sheet = () => Promise.resolve(this.send(p.text, p.id)).then(r => r !== false, () => false);
+                if (this.room && FB.on() && await FB.put(this.room, p)) {   // ช่องทางเร็ว: อีกฝั่งที่เปิดแชทอยู่เห็นภายใน ~1 วินาที
+                    p.state = 'sent';
+                    this.saveToSheet(sheet);   // แล้วบันทึกลง Sheet เบื้องหลัง (ประวัติถาวร)
+                } else {
+                    p.state = (await sheet()) ? 'sent' : 'failed';   // ไม่ได้ตั้งค่า/ใช้ Firebase ไม่ได้ → ส่งผ่าน Sheet ตามเดิม
+                }
+                if (p.state === 'sent') setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);   // ข้อความจริงปรากฏแล้ว ล้างตัวชั่วคราวทิ้ง
             });
         },
+        async saveToSheet(sheet) {   // บันทึกลง Sheet (ประวัติถาวร + ตัวบอก "ข้อความใหม่" ในหน้ารายการ) · ลองซ้ำเองถ้าล้มเหลว
+            for (const delay of [0, 2000, 6000, 15000]) {
+                if (delay) await new Promise(r => setTimeout(r, delay));
+                if (await sheet()) return;
+            }
+            console.warn('บันทึกข้อความลง Sheet ไม่สำเร็จ (ข้อความยังอยู่ในแชทสด)');
+        },
+        subscribe(room) {   // ฟังแชทสดของห้องนี้ (ไม่มีห้อง/ไม่ได้ตั้งค่า Firebase = ไม่ทำอะไร)
+            this.unsubscribe(); this.live = [];
+            if (!room || !FB.on()) return;
+            this.stop = FB.listen('chats/' + room + '/msgs', '', st => { this.live = Object.keys(st || {}).map(id => ({ id, ...st[id] })); });
+        },
+        unsubscribe() { if (this.stop) { this.stop(); this.stop = null; } },
         retry(p) { this.deliver(p); },
         discard(p) { this.pending = this.pending.filter(x => x !== p); },
         onEnter(e) { if (e.shiftKey || e.isComposing) return; e.preventDefault(); this.submit(); }
@@ -880,26 +942,28 @@ createApp({
         return {
             role: 'admin', currentView: 'admin-login', adminTab: 'dashboard',
             adminUser: '', adminPass: '', loginError: '', timer: null, invReady: false, lastSync: '', syncError: false,
+            fbEnabled: FB.on(), fbOnline: false, rooms: {}, liveMsgs: {},
             cases: [], chatId: '', zoom: '',
             inv: { categories: {}, items: [] }, invTab: '', itemForm: null, iosModels: IOS,
-            statusFilter: '', version: APP_VERSION, offerDrafts: {}, typePrices: {}, typeCosts: {}, addonInputs: {}, slip: null, toast: '', receiptId: '', staffName: '', shopAddress: SHOP_ADDRESS
+            statusFilter: '', version: APP_VERSION, offerDrafts: {}, typePrices: {}, typeCosts: {}, addonInputs: {}, slip: null, toast: '', receiptId: '', photoId: '', staffName: '', shopAddress: SHOP_ADDRESS
         }
     },
     computed: {
         statusSummary() {
             const total = this.cases.length;
-            return STATUSES.map(s => {
-                const count = this.cases.filter(c => c.status === s.key).length;
+            return STATUSES.filter(s => !s.hidden).map(s => {
+                const count = this.cases.filter(c => this.grp(c.status) === s.key).length;
                 return { ...s, count, pct: total ? count / total * 100 : 0 };
             });
         },
         dashFiltered() {
-            const l = this.statusFilter ? this.cases.filter(c => c.status === this.statusFilter) : this.cases;
+            const l = this.statusFilter ? this.cases.filter(c => this.grp(c.status) === this.statusFilter) : this.cases;
             return l.slice().reverse(); // เคสที่เข้าล่าสุดขึ้นก่อน
         },
         dashCases() { return this.dashFiltered.slice(0, 10); },
         // เคสในขั้นดำเนินการ (กำลังดำเนินการ + รออะไหล่ — รออะไหล่ยังต้องเห็นและกลับมาดำเนินการได้)
         processCases() { return this.cases.filter(c => c.status === 'กำลังดำเนินการ' || c.status === 'รออะไหล่'); },
+        photoCase() { return this.photoId ? (this.cases.find(c => c.id === this.photoId) || null) : null; },
         receiptCase() { return this.receiptId ? (this.cases.find(c => c.id === this.receiptId) || null) : null; },
         // เคสที่ข้อความล่าสุดมาจากลูกค้า = รอร้านตอบ
         awaitCases() { return this.cases.filter(c => this.awaiting(c)); },
@@ -934,9 +998,11 @@ createApp({
         }
     },
     created() {
+        this.roomToCase = {};   // รหัสห้องแชท → รหัสเคส (ไม่ต้องเป็นข้อมูลที่หน้าจอติดตาม)
         document.addEventListener('visibilitychange', () => { if (!document.hidden && this.currentView !== 'admin-login') this.load(); });   // สลับกลับมาที่แท็บนี้ → อัปเดตทันที
     },
     methods: {
+        grp(st) { return st === 'รออะไหล่' ? 'กำลังดำเนินการ' : st; },   // แดชบอร์ดนับ "รออะไหล่" รวมใน "กำลังดำเนินการ"
         badge(st) { return (STATUSES.find(x => x.key === st) || {}).badge || 'bg-gray-100 text-gray-600'; },
         // โหลดเคสจากร้านทีละคำขอ · ถ้ามีคำสั่งโหลดใหม่ระหว่างรอ (เช่น เพิ่งบันทึกข้อมูล) จะทิ้งผลเก่าแล้วโหลดใหม่ กันข้อมูลเก่าที่มาช้าทับข้อมูลใหม่
         load() {
@@ -952,7 +1018,7 @@ createApp({
                     try { list = await Store.list(this.adminPass); } catch (e) { err = e; }
                     if (this.loadWanted) continue;   // มีคำสั่งโหลดใหม่เข้ามาระหว่างรอ → ทิ้งผลนี้
                     if (err) { console.error(err); this.syncError = true; }   // ผิดพลาด: คงรายการเดิมไว้ ไม่ล้างหน้าจอ
-                    else { this.cases = list; this.syncError = false; this.lastSync = new Date().toLocaleTimeString('th-TH'); }
+                    else { this.cases = list.map(normCase); this.syncError = false; this.lastSync = new Date().toLocaleTimeString('th-TH'); this.ensureRooms(); }
                     if (!this.invReady) { try { this.inv = await Store.invLoad(this.adminPass); this.invReady = true; } catch (e) { console.error(e); } }   // สต็อกโหลดไม่สำเร็จ → ลองใหม่ทุกรอบ
                 }
             } finally { this.loadP = null; }
@@ -979,9 +1045,10 @@ createApp({
                 await this.load();   // โหลดเคส + สต็อก
                 if (!this.invReady) this.showToast('โหลดคลังสินค้าไม่สำเร็จ กำลังลองใหม่อัตโนมัติ — ยังไม่ควรแก้ไขสต็อก');
                 this.startPolling();
+                this.startFeed();
             } else { this.loginError = 'Username หรือ Password ไม่ถูกต้อง!'; }
         },
-        logout() { this.pollGen = (this.pollGen || 0) + 1; clearTimeout(this.timer); this.currentView = 'admin-login'; this.adminPass = ''; this.chatId = ''; },
+        logout() { this.stopFeed(); this.pollGen = (this.pollGen || 0) + 1; clearTimeout(this.timer); this.currentView = 'admin-login'; this.adminPass = ''; this.chatId = ''; },
         async setStatus(c, status) { c.status = status; await Store.setStatus(c.id, status, this.adminPass); },
         acceptCase(c) { this.setStatus(c, 'กำลังดำเนินการ'); this.adminTab = 'process'; },
         photos(c) {
@@ -989,7 +1056,8 @@ createApp({
             return a.map(p => p.startsWith('data:') ? p : `https://drive.google.com/thumbnail?id=${p}&sz=w1200`);
         },
         stockCheck(c, all) {   // all = true: แสดงทุกหมวด (ใช้กับงานซ่อมเพิ่ม)
-            const cats = (!all && PROBLEM_CAT[c.problem]) ? [PROBLEM_CAT[c.problem]] : Object.keys(this.inv.categories);
+            const picked = [...new Set(String(c.problem || '').split(/\s*,\s*/).map(x => PROBLEM_CAT[x]).filter(Boolean))];   // ลูกค้าเลือกอาการได้หลายข้อ
+            const cats = (!all && picked.length) ? picked : Object.keys(this.inv.categories);
             return cats.map(k => !this.inv.categories[k] ? { category: k, missing: true, types: [] } : ({
                 category: k,
                 types: this.inv.categories[k].map(t => ({ type: t, qty: this.inv.items.filter(i => i.category === k && i.type === t && i.model === c.model).reduce((s, i) => s + Number(i.qty), 0) }))
@@ -1019,12 +1087,18 @@ createApp({
         warrantyText(days, c) { const done = this.doneAt(c); return days + ' วัน' + (done ? ' (ถึงวันที่ ' + this.warrantyEnd(done, days) + ')' : ''); },
         deliveryLabel(c) { return c.delivery_method === 'ship' ? 'ส่งทางไปรษณีย์/ขนส่ง' : (c.delivery_method === 'walkin' ? 'นำมาหน้าร้านเอง' : 'ยังไม่ระบุ'); },
         // รับเครื่องแล้ว: บันทึกชื่อผู้รับเครื่อง (หลังบ้านที่ล็อกอินอยู่) และเวลา
-        async markReceived(c) {
+        async markReceived(c) {   // ลูกค้าเลือกวิธีส่งเครื่องแล้ว → ร้านกดรับเครื่อง (บันทึกชื่อผู้ใช้หลังบ้านที่รับ) · แสดงผลทันที แล้วบันทึกเบื้องหลัง
             if (!confirm(`ยืนยันว่ารับเครื่องเคส ${c.id} แล้ว?\nผู้รับเครื่อง: ${this.staffName}`)) return;
-            try { await Store.markReceived(c.id, this.staffName, new Date().toLocaleString('th-TH'), this.adminPass); }
-            catch (e) { alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); return; }
-            await this.load();
-            this.showToast(`บันทึกรับเครื่องเคส ${c.id} แล้ว (ผู้รับ: ${this.staffName})`);
+            const when = new Date().toLocaleString('th-TH');
+            c.received_by = this.staffName; c.received_at = when;
+            try { await Store.markReceived(c.id, this.staffName, when, this.adminPass); this.showToast(`บันทึกรับเครื่องเคส ${c.id} แล้ว (ผู้รับ: ${this.staffName})`); this.load(); }
+            catch (e) { c.received_by = ''; c.received_at = ''; alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+        },
+        async unmarkReceived(c) {   // กดรับเครื่องผิด → ยกเลิกสถานะ
+            if (!confirm(`ยกเลิกสถานะ "รับเครื่องแล้ว" ของเคส ${c.id} ?`)) return;
+            const prev = [c.received_by, c.received_at]; c.received_by = ''; c.received_at = '';
+            try { await Store.markReceived(c.id, '', '', this.adminPass); this.load(); }
+            catch (e) { [c.received_by, c.received_at] = prev; alert('ยกเลิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
         },
         printReceipt() {   // พิมพ์เฉพาะใบเสร็จ (เหมือนการพิมพ์ใบเบิก)
             document.body.classList.add('print-receipt-mode');
@@ -1042,16 +1116,18 @@ createApp({
             const price = Number(this.addonVal(c, cat, type, 'price')) || 0;
             if (!price) { alert('กรุณาใส่ราคาขายของ "' + type + '" ก่อนกดเสนอ'); return; }
             const cost = Number(this.addonVal(c, cat, type, 'cost')) || 0;
-            if (!confirm(`ส่งข้อเสนองานซ่อมเพิ่ม "${cat} · ${type}" ราคา ${this.baht(price)} ให้ลูกค้า?`)) return;
-            const a = { id: 'A-' + Date.now().toString(36).slice(-5).toUpperCase(), category: cat, type, model: c.model, price, cost, decision: '', decision_date: '', offer_date: new Date().toLocaleString('th-TH') };
-            try { await Store.addAddon(c.id, a, this.adminPass); } catch (e) { alert('ส่งข้อเสนอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); return; }
-            await this.load();
-            this.showToast(`ส่งข้อเสนองานซ่อมเพิ่ม "${type}" ให้ลูกค้าแล้ว`);
+            if (!confirm(`เพิ่ม "${cat} · ${type}" ราคา ${this.baht(price)} เข้าบิลของเคสนี้?`)) return;
+            const a = { id: 'A-' + Date.now().toString(36).slice(-5).toUpperCase(), category: cat, type, model: c.model, price, cost, decision: 'accept', decision_date: new Date().toLocaleString('th-TH'), offer_date: new Date().toLocaleString('th-TH'), by_admin: true };   // ร้านเพิ่มเอง = เข้าบิลทันที
+            c.addons = (c.addons || []).concat(a);   // เข้าบิลทันที แล้วบันทึกเบื้องหลัง
+            try { await Store.addAddon(c.id, a, this.adminPass); } catch (e) { c.addons = (c.addons || []).filter(x => x.id !== a.id); alert('เพิ่มรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); return; }
+            this.load();
+            this.showToast(`เพิ่มงานซ่อมเพิ่ม "${type}" เข้าบิลแล้ว`);
         },
         async removeAddon(c, a) {   // ลบข้อเสนองานเพิ่มที่ลูกค้ายังไม่ได้ตอบ
-            if (a.decision || !confirm('ลบข้อเสนองานซ่อมเพิ่มนี้?')) return;
-            try { await Store.removeAddon(c.id, a.id, this.adminPass); } catch (e) { alert('ลบไม่สำเร็จ (ลูกค้าอาจตอบไปแล้ว)'); }
-            await this.load();
+            if (!confirm('ลบรายการงานซ่อมเพิ่มนี้ออกจากบิล?')) return;
+            const keep = c.addons; c.addons = (c.addons || []).filter(x => x.id !== a.id);
+            try { await Store.removeAddon(c.id, a.id, this.adminPass); } catch (e) { c.addons = keep; alert('ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
+            this.load();
         },
         // ----- ยกเลิกงานซ่อม (ร้านเป็นผู้ยกเลิก: ไม่ตัดสต็อกและไม่ออกใบเบิก) -----
         async cancelCase(c) {
@@ -1145,8 +1221,51 @@ createApp({
             await Store.setOffers(c.id, c.offers, c.offer_date, this.adminPass);
         },
         // ----- ข้อความกับลูกค้า -----
-        msgs(c) { return thread(c); },
-        awaiting(c) { const t = thread(c); return t.length > 0 && t[t.length - 1].from === 'customer'; },
+        msgs(c) {   // ข้อความจาก Sheet + ที่มาทางแชทสด (ตัดซ้ำตามรหัส · เรียงตามเวลา)
+            const base = thread(c), live = this.liveMsgs[c.id];
+            if (!live || !live.length) return base;
+            const ids = new Set(base.map(x => x.id)), extra = live.filter(x => !ids.has(x.id));
+            if (!extra.length) return base;
+            const t = m => (/^\d{4}-\d\d-\d\dT/.test(String(m.at)) ? Date.parse(m.at) : NaN);
+            return base.concat(extra).sort((a, b) => { const x = t(a), y = t(b); return isNaN(x) || isNaN(y) ? 0 : x - y; });
+        },
+        awaiting(c) { const t = this.msgs(c); return t.length > 0 && t[t.length - 1].from === 'customer'; },
+        mergeLive(caseId, list) {   // รับข้อความจากแชทสด (ห้องที่เปิดอยู่ หรือช่องแจ้งเตือน) มารวมกับข้อความของเคส
+            const cur = this.liveMsgs[caseId] || [], ids = new Set(cur.map(x => x.id)), add = (list || []).filter(x => x && !ids.has(x.id));
+            if (add.length) this.liveMsgs[caseId] = cur.concat(add);
+        },
+        async ensureRooms() {   // คำนวณรหัสห้องแชทของทุกเคส (ใช้ต่อกับแชทสด)
+            if (!FB.on()) return;
+            for (const c of this.cases) {
+                if (this.rooms[c.id]) continue;
+                const r = await FB.roomKey(c.id, c.phone);
+                if (r) { this.rooms[c.id] = r; this.roomToCase[r] = c.id; }
+            }
+        },
+        // ช่องแจ้งเตือนแชทสด: ลูกค้าส่งข้อความเมื่อไหร่ หลังบ้านเห็นทันที (ไม่ต้องรอ Sheet) แม้ไม่ได้เปิดห้องแชทนั้นอยู่
+        startFeed() {
+            this.stopFeed();
+            if (!FB.on()) return;
+            this.feedSeen = null;
+            this.feedStop = FB.listen('activity/feed', '?orderBy=%22%24key%22&limitToLast=30', st => this.onFeed(st), ok => { this.fbOnline = ok; });
+        },
+        stopFeed() { if (this.feedStop) { this.feedStop(); this.feedStop = null; } this.fbOnline = false; },
+        onFeed(st) {
+            const keys = Object.keys(st || {});
+            if (!this.feedSeen) { this.feedSeen = new Set(keys); return; }   // ครั้งแรก = ของเก่า ไม่แจ้งเตือน
+            keys.filter(k => !this.feedSeen.has(k)).forEach(k => { this.feedSeen.add(k); this.fetchFeedMessage(k, st[k]); });
+        },
+        async fetchFeedMessage(mid, e) {
+            if (!this.roomToCase[e.room]) { await this.load(); await this.ensureRooms(); }   // เคสใหม่ที่ยังไม่รู้จัก → โหลดรายการก่อน
+            const caseId = this.roomToCase[e.room];
+            if (!caseId) return;
+            let m = null;
+            for (const d of [0, 250, 700]) { if (d) await new Promise(r => setTimeout(r, d)); m = await FB.get('chats/' + e.room + '/msgs/' + mid); if (m) break; }
+            if (!m) return;
+            this.mergeLive(caseId, [{ id: mid, ...m }]);
+            const c = this.cases.find(x => x.id === caseId);
+            this.showToast('ข้อความใหม่จาก ' + ((c && (c.name || c.id)) || caseId) + ': ' + String(m.text).slice(0, 60));
+        },
         openChat(c) { this.chatId = c.id; },
         async sendMsg(c, text, id) {   // คืน false = ส่งไม่สำเร็จ (กล่องแชทจะขึ้น "ส่งไม่สำเร็จ · ส่งใหม่" ให้เอง) · id = รหัสข้อความที่กล่องแชทแสดงไว้ทันทีแล้ว
             const t = String(text || '').trim(); if (!t) return false;
