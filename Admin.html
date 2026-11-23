@@ -628,7 +628,7 @@
 // วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
 const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
 const KEY = 'repair_cases', INV_KEY = 'repair_inv';
-const APP_VERSION = '1.0.9';
+const APP_VERSION = '1.1.0';
 const normCase = c => (c && c.status === 'รอรับงาน' ? { ...c, status: 'รอรับงานซ่อม' } : c);
 // สถานะการซ่อม -> สีแถบสัดส่วน / สีป้ายสถานะ
 const STATUSES = [
@@ -770,9 +770,11 @@ const newMsgId = () => 'M-' + Date.now().toString(36).toUpperCase() + Math.rando
 const Store = {
     async list(token) {
         if (API_URL) {   // ผิดพลาด = โยน error (ห้ามคืนรายการว่าง ไม่งั้นหน้าจอจะเหมือนเคสหายไปทั้งหมด)
-            const r = await get('action=list', token);
+            const r = await get('action=list' + (Store._ver ? '&ver=' + encodeURIComponent(Store._ver) : ''), token);   // ส่งเวอร์ชันที่มี → ถ้าไม่เปลี่ยน เซิร์ฟเวอร์ตอบสั้นๆ ไม่ต้องส่งข้อมูลทั้งชุด
             if (!r.ok) throw new Error(r.error || 'list failed');
-            return r.data || [];
+            if (r.unchanged && Store._cache) return Store._cache;
+            Store._ver = r.ver || ''; Store._cache = r.data || [];
+            return Store._cache;
         }
         const raw = localStorage.getItem(KEY);
         if (raw === null) { localStorage.setItem(KEY, JSON.stringify(SEED)); return SEED; }
