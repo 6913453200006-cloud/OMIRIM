@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>OMIRIM - ระบบหลังบ้าน</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -17,7 +17,19 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Prompt', sans-serif; background: linear-gradient(180deg, #e3f0ff 0%, #f5faff 55%, #ffffff 100%) fixed; min-height: 100vh; }
+        html, body {
+            font-family: 'Prompt', sans-serif;
+            touch-action: manipulation;
+            -webkit-text-size-adjust: 100%;
+            overscroll-behavior-x: none;
+            overflow-x: hidden;
+            max-width: 100vw;
+        }
+        body { background: linear-gradient(180deg, #e3f0ff 0%, #f5faff 55%, #ffffff 100%) fixed; min-height: 100vh; min-height: 100dvh; }
+        /* ป้องกัน Safari บน iOS ซูมอัตโนมัติเวลาแตะช่องกรอกข้อความ */
+        @media (max-width: 768px) {
+            input, select, textarea { font-size: 16px !important; }
+        }
         @media print {
             .no-print { display: none !important; }
             .print-only { display: block !important; }
@@ -31,7 +43,6 @@
             body.print-slip-mode #slip, body.print-slip-mode #slip * { visibility: visible !important; }
             body.print-slip-mode #slip { position: absolute; left: 0; top: 0; width: 100%; max-width: none; margin: 0; box-shadow: none; }
         }
-
         /* พิมพ์เฉพาะใบเสร็จรับเงิน (หลังบ้าน) */
         @media print {
             @page { size: A4 portrait; margin: 12mm; }
@@ -40,26 +51,21 @@
             body.print-receipt-mode #receipt-print { position: absolute; left: 0; top: 0; width: 100%; max-width: none; margin: 0; box-shadow: none; }
         }
 
-        /* ===== การเคลื่อนไหว (v1.0.1) ===== */
-        /* สลับหน้าเมนู (แดชบอร์ด / เคสใหม่ / กำลังดำเนินการ / คลัง) */
+        /* ===== การเคลื่อนไหว (v1.1.2) ===== */
         .page-enter-active, .page-leave-active { transition: opacity .2s ease, transform .2s ease; }
         .page-enter-from { opacity: 0; transform: translateY(8px); }
         .page-leave-to { opacity: 0; transform: translateY(-4px); }
-        /* เข้า-ออกระบบ (หน้า Login <-> ระบบหลังบ้าน) */
         .view-enter-active { transition: opacity .35s ease, transform .35s ease; }
         .view-leave-active { transition: opacity .25s ease; position: absolute; inset: 0; }
         .view-enter-from { opacity: 0; transform: scale(.98); }
         .view-leave-to { opacity: 0; }
-        /* หน้าต่างป๊อปอัป (ขยายรูป / เพิ่มอะไหล่) */
         .modal-enter-active, .modal-leave-active { transition: opacity .2s ease; }
         .modal-enter-from, .modal-leave-to { opacity: 0; }
         .modal-enter-active .modal-card, .modal-leave-active .modal-card { transition: transform .2s ease; }
         .modal-enter-from .modal-card, .modal-leave-to .modal-card { transform: scale(.95) translateY(8px); }
-        /* แถบสัดส่วนสถานะการซ่อมในแดชบอร์ด */
         @keyframes reveal-x { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
         .status-bar { animation: reveal-x .7s cubic-bezier(.2,.7,.2,1) both; }
         .status-seg { transition: width .5s ease; }
-        /* ปุ่ม / เมนูด้านข้าง */
         button { transition: background-color .2s ease, transform .12s ease; }
         button:active { transform: scale(.97); }
         nav a { transition: background-color .2s ease; }
@@ -69,37 +75,61 @@
     </style>
 </head>
 <body>
-    <div id="app" class="min-h-screen">
+    <div id="app" class="min-h-screen w-full overflow-x-hidden">
 <!-- ================= BACKEND (ADMIN) ================= -->
         <div v-if="role === 'admin'" class="min-h-screen flex bg-gray-100 relative">
-            
+
             <!-- Admin Login -->
             <transition name="view" appear>
-            <div v-if="currentView === 'admin-login'" class="flex-1 flex items-center justify-center min-h-screen">
-                <div class="bg-white p-8 rounded-lg shadow-lg w-96 text-center">
+            <div v-if="currentView === 'admin-login'" class="flex-1 flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="bg-white p-6 sm:p-8 rounded-lg shadow-lg w-full max-w-sm text-center">
                     <div class="text-center mb-5"><div class="text-2xl font-bold tracking-[0.3em] text-blue-600">OMIRIM</div><div class="text-[11px] leading-tight text-gray-500">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div></div>
                     <i class="fas fa-user-shield text-4xl text-blue-600 mb-3"></i>
-                    <h2 class="text-2xl font-bold mb-6 text-gray-800">ระบบหลังบ้าน (Admin)</h2>
-                    <input v-model="adminUser" type="text" placeholder="Username" class="w-full p-3 border rounded mb-4">
-                    <input v-model="adminPass" type="password" placeholder="Password" class="w-full p-3 border rounded mb-6">
+                    <h2 class="text-xl sm:text-2xl font-bold mb-6 text-gray-800">ระบบหลังบ้าน (Admin)</h2>
+                    <input v-model="adminUser" @keyup.enter="adminLogin" type="text" placeholder="Username" class="w-full p-3 border rounded mb-4">
+                    <input v-model="adminPass" @keyup.enter="adminLogin" type="password" placeholder="Password" class="w-full p-3 border rounded mb-6">
                     <button @click="adminLogin" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700">เข้าสู่ระบบหลังบ้าน</button>
                     <p class="text-red-500 mt-2 text-sm" v-if="loginError">{{ loginError }}</p>
                 </div>
             </div>
             </transition>
 
-            <!-- Admin Panel (Sidebar + Content) -->
+            <!-- Admin Panel (Mobile Header + Sidebar + Content) -->
             <transition name="view">
-            <div v-if="currentView !== 'admin-login'" class="flex flex-1 min-w-0 min-h-screen">
-                <!-- Sidebar -->
-                <div class="w-64 bg-blue-600 text-white min-h-screen flex flex-col no-print shadow-lg">
-                    <div class="p-4 text-center border-b border-blue-400"><div class="font-bold text-2xl tracking-[0.3em]">OMIRIM</div><div class="text-[11px] leading-tight text-blue-100 mt-1">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div><div class="text-xs text-blue-200 mt-2">Admin System</div></div>
-                    <nav class="flex-1 p-4 space-y-2">
-                        <a href="#" @click.prevent="adminTab = 'dashboard'" :class="{'bg-blue-700': adminTab === 'dashboard'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-chart-line w-6"></i> 1. แดชบอร์ด <span v-if="awaitCount" class="ml-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full" title="ลูกค้าส่งข้อความรอตอบ">{{ awaitCount }}</span></a>
-                        <a href="#" @click.prevent="adminTab = 'received'" :class="{'bg-blue-700': adminTab === 'received'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-inbox w-6"></i> 2. เคสงานใหม่ ({{ cases.filter(c => c.status === 'รอรับงานซ่อม').length }})</a>
-                        <a href="#" @click.prevent="adminTab = 'process'" :class="{'bg-blue-700': adminTab === 'process'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-tools w-6"></i> 3. กำลังดำเนินการ ({{ processCases.length }})</a>
-                        <a href="#" @click.prevent="adminTab = 'inventory'" :class="{'bg-blue-700': adminTab === 'inventory'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-boxes w-6"></i> 4. คลังสินค้า</a>
-                        <a href="#" @click.prevent="adminTab = 'accounting'" :class="{'bg-blue-700': adminTab === 'accounting'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-file-invoice-dollar w-6"></i> 5. รายการบัญชี</a>
+            <div v-if="currentView !== 'admin-login'" class="flex flex-col md:flex-row flex-1 min-w-0 min-h-screen w-full">
+
+                <!-- แถบด้านบนสำหรับมือถือ -->
+                <div class="md:hidden bg-blue-600 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow no-print">
+                    <button @click="mobileMenu = true" class="p-2 -ml-2 rounded hover:bg-blue-500" aria-label="เปิดเมนู">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <div class="text-center">
+                        <div class="font-bold tracking-[0.25em] text-base leading-none">OMIRIM</div>
+                        <div class="text-[11px] text-blue-100 mt-0.5">{{ tabTitle }}</div>
+                    </div>
+                    <button @click="selectTab('dashboard')" class="relative p-2 -mr-2 rounded hover:bg-blue-500" title="ข้อความรอตอบ">
+                        <i class="fas fa-bell text-lg"></i>
+                        <span v-if="awaitCount" class="absolute top-1 right-1 bg-red-500 text-white text-[10px] px-1.5 rounded-full leading-tight">{{ awaitCount }}</span>
+                    </button>
+                </div>
+
+                <!-- ฉากหลังมืดเมื่อเปิดเมนูบนมือถือ -->
+                <div v-if="mobileMenu" @click="mobileMenu = false" class="fixed inset-0 bg-black/50 z-40 md:hidden no-print"></div>
+
+                <!-- Sidebar (เลื่อนเข้า-ออกได้บนมือถือ / แสดงถาวรบนจอคอม) -->
+                <div :class="mobileMenu ? 'translate-x-0' : '-translate-x-full md:translate-x-0'" class="fixed md:static inset-y-0 left-0 z-50 w-64 bg-blue-600 text-white min-h-screen flex flex-col no-print shadow-lg transition-transform duration-200 ease-out shrink-0">
+                    <div class="p-4 text-center border-b border-blue-400 relative">
+                        <button @click="mobileMenu = false" class="md:hidden absolute top-3 right-3 text-blue-100 hover:text-white p-1" aria-label="ปิดเมนู"><i class="fas fa-times text-lg"></i></button>
+                        <div class="font-bold text-2xl tracking-[0.3em]">OMIRIM</div>
+                        <div class="text-[11px] leading-tight text-blue-100 mt-1">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div>
+                        <div class="text-xs text-blue-200 mt-2">Admin System</div>
+                    </div>
+                    <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+                        <a href="#" @click.prevent="selectTab('dashboard')" :class="{'bg-blue-700': adminTab === 'dashboard'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-chart-line w-6"></i> 1. แดชบอร์ด <span v-if="awaitCount" class="ml-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full" title="ลูกค้าส่งข้อความรอตอบ">{{ awaitCount }}</span></a>
+                        <a href="#" @click.prevent="selectTab('received')" :class="{'bg-blue-700': adminTab === 'received'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-inbox w-6"></i> 2. เคสงานใหม่ ({{ cases.filter(c => c.status === 'รอรับงานซ่อม').length }})</a>
+                        <a href="#" @click.prevent="selectTab('process')" :class="{'bg-blue-700': adminTab === 'process'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-tools w-6"></i> 3. กำลังดำเนินการ ({{ processCases.length }})</a>
+                        <a href="#" @click.prevent="selectTab('inventory')" :class="{'bg-blue-700': adminTab === 'inventory'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-boxes w-6"></i> 4. คลังสินค้า</a>
+                        <a href="#" @click.prevent="selectTab('accounting')" :class="{'bg-blue-700': adminTab === 'accounting'}" class="block p-3 rounded hover:bg-blue-500"><i class="fas fa-file-invoice-dollar w-6"></i> 5. รายการบัญชี</a>
                     </nav>
                     <div class="p-4 pb-10 border-t border-blue-400">
                         <p v-if="fbEnabled" class="text-[11px] mb-1" :class="fbOnline ? 'text-green-200' : 'text-yellow-200'"><i class="fas fa-bolt"></i> {{ fbOnline ? 'แชทสด: เชื่อมต่อแล้ว' : 'แชทสด: ยังไม่เชื่อมต่อ' }}</p>
@@ -109,46 +139,46 @@
                 </div>
 
                 <!-- Main Content -->
-                <div class="flex-1 p-8 overflow-y-auto">
-                    
+                <div class="flex-1 min-w-0 p-4 sm:p-6 md:p-8 pb-12 overflow-y-auto">
+
                     <transition name="page" mode="out-in">
                     <div :key="adminTab">
                     <!-- หน้า 1: แดชบอร์ด -->
                     <div v-if="adminTab === 'dashboard'">
-                        <h2 class="text-2xl font-bold mb-6">ภาพรวมระบบ (Dashboard)</h2>
-                        <div v-if="awaitCount" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6 text-sm text-yellow-800">
+                        <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">ภาพรวมระบบ (Dashboard)</h2>
+                        <div v-if="awaitCount" class="bg-yellow-50 border-l-4 border-yellow-400 p-3.5 sm:p-4 rounded mb-5 text-xs sm:text-sm text-yellow-800">
                             <i class="fas fa-bell"></i> ลูกค้าส่งข้อความรอตอบ <b>{{ awaitCount }}</b> เคส:
                             <button v-for="c in awaitCases" :key="c.id" @click="openChat(c)" class="ml-2 underline font-semibold">{{ c.id }}</button>
                         </div>
-                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-blue-500">
-                                <h4 class="text-gray-500 text-sm">เคสทั้งหมด</h4>
-                                <p class="text-3xl font-bold">{{ cases.length }}</p>
+                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
+                            <div class="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-blue-500">
+                                <h4 class="text-gray-500 text-xs sm:text-sm">เคสทั้งหมด</h4>
+                                <p class="text-2xl sm:text-3xl font-bold">{{ cases.length }}</p>
                             </div>
-                            <div v-for="s in statusSummary" :key="s.key" :class="s.bar.replace('bg-', 'border-')" class="bg-white p-6 rounded shadow border-l-4">
-                                <h4 class="text-gray-500 text-sm">{{ s.key }}</h4>
-                                <p class="text-3xl font-bold">{{ s.count }}</p>
+                            <div v-for="s in statusSummary" :key="s.key" :class="s.bar.replace('bg-', 'border-')" class="bg-white p-4 sm:p-6 rounded shadow border-l-4">
+                                <h4 class="text-gray-500 text-xs sm:text-sm truncate">{{ s.key }}</h4>
+                                <p class="text-2xl sm:text-3xl font-bold">{{ s.count }}</p>
                             </div>
                         </div>
 
                         <!-- สถานะการซ่อมทั้งหมด -->
-                        <div class="bg-white rounded shadow p-6 mt-8">
+                        <div class="bg-white rounded shadow p-4 sm:p-6 mt-6">
                             <div class="flex justify-between items-center flex-wrap gap-2 mb-4">
-                                <h3 class="text-lg font-bold">สถานะการซ่อม</h3>
-                                <div class="flex gap-2 flex-wrap">
-                                    <button @click="statusFilter = ''" :class="statusFilter === '' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'" class="px-4 py-1 rounded-full text-sm">ทั้งหมด ({{ cases.length }})</button>
-                                    <button v-for="s in statusSummary" :key="s.key" @click="statusFilter = s.key" :class="statusFilter === s.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'" class="px-4 py-1 rounded-full text-sm">{{ s.key }} ({{ s.count }})</button>
+                                <h3 class="text-base sm:text-lg font-bold">สถานะการซ่อม</h3>
+                                <div class="flex gap-1.5 sm:gap-2 flex-wrap">
+                                    <button @click="statusFilter = ''" :class="statusFilter === '' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'" class="px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm">ทั้งหมด ({{ cases.length }})</button>
+                                    <button v-for="s in statusSummary" :key="s.key" @click="statusFilter = s.key" :class="statusFilter === s.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'" class="px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm">{{ s.key }} ({{ s.count }})</button>
                                 </div>
                             </div>
                             <!-- แถบสัดส่วนสถานะ -->
                             <div class="status-bar flex h-3 rounded-full overflow-hidden bg-gray-200 mb-2">
                                 <div v-for="s in statusSummary" :key="s.key" :class="s.bar" class="status-seg h-full" :style="{ width: s.pct + '%' }" :title="s.key + ' ' + s.count + ' เคส'"></div>
                             </div>
-                            <div class="flex gap-4 flex-wrap text-xs text-gray-500 mb-6">
+                            <div class="flex gap-3 sm:gap-4 flex-wrap text-xs text-gray-500 mb-5">
                                 <span v-for="s in statusSummary" :key="s.key"><span :class="s.bar" class="inline-block w-2 h-2 rounded-full mr-1"></span>{{ s.key }}</span>
                             </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-sm">
+                            <div class="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                                <table class="w-full text-left text-xs sm:text-sm min-w-[640px]">
                                     <thead class="bg-gray-50 border-b">
                                         <tr>
                                             <th class="p-3">รหัส</th>
@@ -162,12 +192,12 @@
                                     </thead>
                                     <tbody>
                                         <tr v-for="c in dashCases" :key="c.id" class="border-b">
-                                            <td class="p-3">{{ c.id }}</td>
+                                            <td class="p-3 whitespace-nowrap">{{ c.id }}</td>
                                             <td class="p-3">{{ c.name }} <span class="block text-xs text-gray-500">{{ c.phone }}</span></td>
-                                            <td class="p-3">{{ c.model }}</td>
+                                            <td class="p-3 whitespace-nowrap">{{ c.model }}</td>
                                             <td class="p-3 text-red-500">{{ c.problem }}</td>
-                                            <td class="p-3">{{ c.date }}</td>
-                                            <td class="p-3"><span :class="badge(c.status)" class="px-3 py-1 rounded-full text-xs whitespace-nowrap">{{ c.status }}</span></td>
+                                            <td class="p-3 whitespace-nowrap">{{ c.date }}</td>
+                                            <td class="p-3"><span :class="badge(c.status)" class="px-2.5 py-1 rounded-full text-xs whitespace-nowrap">{{ c.status }}</span></td>
                                             <td class="p-3"><button @click="openChat(c)" :class="awaiting(c) ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white text-blue-600 border-blue-200'" class="border px-2 py-1 rounded text-xs hover:bg-blue-50 whitespace-nowrap"><i class="fas fa-comments"></i> {{ msgs(c).length || '' }}<span v-if="awaiting(c)"> · รอตอบ</span></button></td>
                                         </tr>
                                         <tr v-if="!dashCases.length"><td colspan="7" class="p-6 text-center text-gray-400">ไม่มีเคสในสถานะนี้</td></tr>
@@ -180,33 +210,35 @@
 
                     <!-- หน้า 2: เคสงานใหม่ -->
                     <div v-if="adminTab === 'received'">
-                        <h2 class="text-2xl font-bold mb-6">เคสงานใหม่จากลูกค้า (รอยืนยัน)</h2>
-                        <div class="bg-white rounded shadow overflow-hidden">
-                            <table class="w-full text-left">
+                        <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">เคสงานใหม่จากลูกค้า (รอยืนยัน)</h2>
+                        <div class="bg-white rounded shadow overflow-x-auto">
+                            <table class="w-full text-left text-xs sm:text-sm min-w-[680px]">
                                 <thead class="bg-gray-50 border-b">
                                     <tr>
-                                        <th class="p-4">รหัส</th>
-                                        <th class="p-4">ลูกค้า</th>
-                                        <th class="p-4">รุ่นเครื่อง</th>
-                                        <th class="p-4">ปัญหา</th>
-                                        <th class="p-4">วันที่</th>
-                                        <th class="p-4">จัดการ</th>
+                                        <th class="p-3 sm:p-4">รหัส</th>
+                                        <th class="p-3 sm:p-4">ลูกค้า</th>
+                                        <th class="p-3 sm:p-4">รุ่นเครื่อง</th>
+                                        <th class="p-3 sm:p-4">ปัญหา</th>
+                                        <th class="p-3 sm:p-4">วันที่</th>
+                                        <th class="p-3 sm:p-4">จัดการ</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="c in cases.filter(c => c.status === 'รอรับงานซ่อม')" class="border-b hover:bg-gray-50">
-                                        <td class="p-4">{{ c.id }}</td>
-                                        <td class="p-4">{{ c.name }} <br><span class="text-xs text-gray-500">{{ c.phone }}</span></td>
-                                        <td class="p-4">{{ c.model }} ({{ c.color }})</td>
-                                        <td class="p-4 text-red-500">{{ c.problem }}</td>
-                                        <td class="p-4 text-sm">{{ c.date }}</td>
-                                        <td class="p-4">
-                                            <button @click="acceptCase(c)" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">รับงาน (ส่งไปส่วนที่ 3)</button>
-                                            <button @click="cancelCase(c)" class="ml-2 border border-red-300 text-red-600 px-3 py-1 rounded text-sm hover:bg-red-50"><i class="fas fa-ban"></i> ยกเลิก</button>
-                                            <button @click="photoId = c.id" class="ml-2 bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"><i class="fas fa-images"></i> ดูรูป ({{ photos(c).length }})</button>
+                                    <tr v-for="c in cases.filter(c => c.status === 'รอรับงานซ่อม')" :key="c.id" class="border-b hover:bg-gray-50 align-top">
+                                        <td class="p-3 sm:p-4 whitespace-nowrap font-semibold">{{ c.id }}</td>
+                                        <td class="p-3 sm:p-4">{{ c.name }} <br><span class="text-xs text-gray-500">{{ c.phone }}</span></td>
+                                        <td class="p-3 sm:p-4">{{ c.model }} <span v-if="c.color">({{ c.color }})</span></td>
+                                        <td class="p-3 sm:p-4 text-red-500">{{ c.problem }}</td>
+                                        <td class="p-3 sm:p-4 whitespace-nowrap">{{ c.date }}</td>
+                                        <td class="p-3 sm:p-4">
+                                            <div class="flex flex-wrap gap-1.5 items-center">
+                                                <button @click="acceptCase(c)" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs sm:text-sm hover:bg-blue-700">รับงาน (ส่งไปส่วนที่ 3)</button>
+                                                <button @click="cancelCase(c)" class="border border-red-300 text-red-600 px-3 py-1.5 rounded text-xs sm:text-sm hover:bg-red-50"><i class="fas fa-ban"></i> ยกเลิก</button>
+                                                <button @click="photoId = c.id" class="bg-blue-500 text-white px-3 py-1.5 rounded text-xs sm:text-sm hover:bg-blue-600"><i class="fas fa-images"></i> ดูรูป ({{ photos(c).length }})</button>
+                                                <button @click="openChat(c)" :class="awaiting(c) ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white text-blue-600 border-blue-200'" class="border px-2.5 py-1.5 rounded text-xs sm:text-sm hover:bg-blue-50 whitespace-nowrap"><i class="fas fa-comments"></i> {{ msgs(c).length || '' }}<span v-if="awaiting(c)"> · รอตอบ</span></button>
+                                            </div>
                                             <div class="mt-2 text-xs text-gray-600">ช่องทางส่งเครื่อง: {{ deliveryLabel(c) }}</div>
-                                            <div class="mt-1"><span v-if="c.received_at" class="text-xs text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span></div>
-                                            <button @click="openChat(c)" :class="awaiting(c) ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white text-blue-600 border-blue-200'" class="ml-2 border px-2 py-1 rounded text-sm hover:bg-blue-50 whitespace-nowrap"><i class="fas fa-comments"></i> {{ msgs(c).length || '' }}<span v-if="awaiting(c)"> · รอตอบ</span></button>
+                                            <div v-if="c.received_at" class="mt-1 text-xs text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</div>
                                         </td>
                                     </tr>
                                     <tr v-if="cases.filter(c => c.status === 'รอรับงานซ่อม').length === 0">
@@ -219,48 +251,53 @@
 
                     <!-- หน้า 3: กำลังดำเนินการ -->
                     <div v-if="adminTab === 'process'">
-                        <h2 class="text-2xl font-bold mb-6">เคสกำลังดำเนินการ / รออะไหล่</h2>
-                        <div class="space-y-6">
+                        <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">เคสกำลังดำเนินการ / รออะไหล่</h2>
+                        <div class="space-y-5 sm:space-y-6">
                             <div v-for="c in processCases" :key="c.id" class="bg-white rounded shadow border">
-                                <div class="flex justify-between items-start p-5 border-b">
-                                    <div class="text-gray-700 space-y-1">
-                                        <h3 class="font-bold text-xl text-gray-900">รหัสเคส: {{ c.id }} <span class="text-sm font-normal text-gray-400 ml-2">{{ c.date }}</span></h3>
-                                        <p><i class="fas fa-user w-5"></i>{{ c.name }} <span v-if="c.nickname">({{ c.nickname }})</span> · <i class="fas fa-phone w-5"></i>{{ c.phone }} <span v-if="c.email">· {{ c.email }}</span></p>
+                                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 p-4 sm:p-5 border-b">
+                                    <div class="text-gray-700 space-y-1 text-sm sm:text-base min-w-0">
+                                        <h3 class="font-bold text-lg sm:text-xl text-gray-900">รหัสเคส: {{ c.id }} <span class="text-xs sm:text-sm font-normal text-gray-400 ml-1">{{ c.date }}</span></h3>
+                                        <p class="break-words"><i class="fas fa-user w-5"></i>{{ c.name }} <span v-if="c.nickname">({{ c.nickname }})</span> · <i class="fas fa-phone w-5"></i>{{ c.phone }} <span v-if="c.email">· {{ c.email }}</span></p>
                                         <p><i class="fas fa-mobile-alt w-5"></i>{{ c.model }} · สี {{ c.color || '-' }} · โมเดล {{ c.model_number || '-' }}</p>
                                         <p><i class="fas fa-lock w-5"></i>รหัสผ่านหน้าจอ: <b>{{ c.screen_password || '-' }}</b></p>
-                                        <p><i class="fas fa-truck w-5"></i>ช่องทางส่งเครื่อง: {{ deliveryLabel(c) }} · <span v-if="c.received_at" class="text-green-700 font-semibold"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span><button v-else-if="c.delivery_method" @click="markReceived(c)" class="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"><i class="fas fa-box-open"></i> รับเครื่องแล้ว</button><span v-else class="ml-2 text-xs text-gray-500">รอลูกค้าเลือกวิธีส่งเครื่อง</span><button v-if="c.received_at" @click="unmarkReceived(c)" class="ml-2 text-xs text-red-500 underline">ยกเลิก (กดผิด)</button></p>
+                                        <p class="flex flex-wrap items-center gap-1.5"><i class="fas fa-truck w-5"></i><span>ช่องทางส่งเครื่อง: {{ deliveryLabel(c) }}</span> ·
+                                            <span v-if="c.received_at" class="text-green-700 font-semibold text-xs sm:text-sm"><i class="fas fa-box-open"></i> รับเครื่องแล้ว โดย {{ c.received_by }} ({{ c.received_at }})</span>
+                                            <button v-else-if="c.delivery_method" @click="markReceived(c)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"><i class="fas fa-box-open"></i> รับเครื่องแล้ว</button>
+                                            <span v-else class="text-xs text-gray-500">รอลูกค้าเลือกวิธีส่งเครื่อง</span>
+                                            <button v-if="c.received_at" @click="unmarkReceived(c)" class="text-xs text-red-500 underline">ยกเลิก (กดผิด)</button>
+                                        </p>
                                     </div>
-                                    <span :class="badge(c.status)" class="px-3 py-1 rounded-full text-sm">{{ c.status }}</span>
+                                    <span :class="badge(c.status)" class="self-start px-3 py-1 rounded-full text-xs sm:text-sm whitespace-nowrap">{{ c.status }}</span>
                                 </div>
-                                <div class="p-5 space-y-6">
+                                <div class="p-4 sm:p-5 space-y-5 sm:space-y-6">
                                     <!-- อาการเสีย -->
-                                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                                    <div class="bg-red-50 border-l-4 border-red-500 p-3.5 sm:p-4 rounded">
                                         <p class="text-xs text-red-400">อาการเสีย</p>
-                                        <p class="text-xl font-bold text-red-700">{{ c.problem }}</p>
-                                        <p class="text-xs text-gray-500 mt-3">รายละเอียดจากลูกค้า</p>
-                                        <p class="whitespace-pre-line" :class="c.problem_desc ? 'text-gray-900 text-lg' : 'text-gray-400'">{{ c.problem_desc || 'ลูกค้าไม่ได้ระบุรายละเอียดเพิ่มเติม' }}</p>
+                                        <p class="text-lg sm:text-xl font-bold text-red-700">{{ c.problem }}</p>
+                                        <p class="text-xs text-gray-500 mt-2">รายละเอียดจากลูกค้า</p>
+                                        <p class="whitespace-pre-line text-sm sm:text-base" :class="c.problem_desc ? 'text-gray-900' : 'text-gray-400'">{{ c.problem_desc || 'ลูกค้าไม่ได้ระบุรายละเอียดเพิ่มเติม' }}</p>
                                     </div>
                                     <!-- รูปภาพ -->
                                     <div>
-                                        <h4 class="font-semibold mb-2 text-gray-700"><i class="fas fa-images"></i> ภาพจากลูกค้า (คลิกเพื่อขยาย)</h4>
-                                        <div v-if="photos(c).length" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                            <img v-for="(p, i) in photos(c)" :key="i" :src="p" @click="zoom = p" class="h-40 w-full object-cover rounded border cursor-pointer hover:opacity-80">
+                                        <h4 class="font-semibold mb-2 text-gray-700 text-sm sm:text-base"><i class="fas fa-images"></i> ภาพจากลูกค้า (คลิกเพื่อขยาย)</h4>
+                                        <div v-if="photos(c).length" class="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
+                                            <img v-for="(p, i) in photos(c)" :key="i" :src="p" @click="zoom = p" class="h-32 sm:h-40 w-full object-cover rounded border cursor-pointer hover:opacity-80">
                                         </div>
                                         <p v-else class="text-sm text-gray-400">ไม่มีรูปแนบ</p>
                                     </div>
                                     <!-- เช็คคลัง -->
                                     <div>
-                                        <h4 class="font-semibold mb-2 text-blue-600"><i class="fas fa-search"></i> เช็คอะไหล่ในคลังที่เกี่ยวข้อง ({{ c.model }}) <span class="text-xs font-normal text-gray-500">· แสดงทุกประเภทในหมวด ใส่ต้นทุน (ลูกค้าไม่เห็น) และราคาขายเอง แล้วกด "+ เสนอ" ลูกค้าจะเลือกเปลี่ยนเป็นชิ้นไหนเอง</span></h4>
-                                        <div class="bg-gray-50 p-3 rounded text-sm space-y-2">
+                                        <h4 class="font-semibold mb-2 text-blue-600 text-sm sm:text-base"><i class="fas fa-search"></i> เช็คอะไหล่ในคลังที่เกี่ยวข้อง ({{ c.model }}) <span class="block sm:inline text-xs font-normal text-gray-500">· ใส่ต้นทุน (ลูกค้าไม่เห็น) และราคาขาย แล้วกด "+ เสนอ"</span></h4>
+                                        <div class="bg-gray-50 p-3 rounded text-sm space-y-3">
                                             <div v-for="g in stockCheck(c)" :key="g.category">
                                                 <p class="font-semibold">{{ g.category }}</p>
-                                                <p v-if="g.missing" class="text-gray-500 pl-2">ยังไม่มีหมวดหมู่นี้ในคลัง (เพิ่มได้ที่เมนู "4. คลังสินค้า" → หมวดหมู่ ชื่อ "{{ g.category }}")</p>
-                                                <div v-for="t in g.types" :key="t.type" class="flex items-center justify-between gap-2 py-1 pl-2 border-b last:border-0">
-                                                    <span>{{ t.type }} - <span :class="t.qty > 0 ? 'text-green-600' : 'text-red-600 font-bold'">{{ t.qty > 0 ? 'คงเหลือ: ' + t.qty + ' ชิ้น' : 'หมด / ไม่มีในคลัง' }}</span></span>
-                                                    <span class="flex items-center gap-2">
-                                                        <input type="number" min="0" placeholder="ต้นทุน" title="ต้นทุน (บาท) — ลูกค้าไม่เห็น" :value="typeCost(c, g.category, t.type)" @input="setTypeCost(c, g.category, t.type, $event.target.value)" class="w-24 p-1 border rounded text-right">
-                                                        <input type="number" min="0" placeholder="ราคาขาย" title="ราคาขายให้ลูกค้า (บาท)" :value="typePrice(c, g.category, t.type)" @input="setTypePrice(c, g.category, t.type, $event.target.value)" class="w-24 p-1 border rounded text-right">
-                                                        <button @click="addOffer(c, g.category, t.type)" :disabled="hasOffer(c, g.category, t.type)" class="bg-indigo-500 text-white px-3 py-1 rounded text-xs hover:bg-indigo-600 disabled:opacity-40">{{ hasOffer(c, g.category, t.type) ? 'เสนอแล้ว' : '+ เสนอ' }}</button>
+                                                <p v-if="g.missing" class="text-gray-500 pl-2 text-xs">ยังไม่มีหมวดหมู่นี้ในคลัง (เพิ่มได้ที่เมนู "4. คลังสินค้า" → หมวดหมู่ ชื่อ "{{ g.category }}")</p>
+                                                <div v-for="t in g.types" :key="t.type" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 pl-2 border-b last:border-0">
+                                                    <span class="text-xs sm:text-sm">{{ t.type }} - <span :class="t.qty > 0 ? 'text-green-600' : 'text-red-600 font-bold'">{{ t.qty > 0 ? 'คงเหลือ: ' + t.qty + ' ชิ้น' : 'หมด / ไม่มีในคลัง' }}</span></span>
+                                                    <span class="flex items-center gap-1.5 sm:gap-2">
+                                                        <input type="number" min="0" placeholder="ต้นทุน" title="ต้นทุน (บาท) — ลูกค้าไม่เห็น" :value="typeCost(c, g.category, t.type)" @input="setTypeCost(c, g.category, t.type, $event.target.value)" class="w-20 sm:w-24 p-1.5 border rounded text-right bg-white">
+                                                        <input type="number" min="0" placeholder="ราคาขาย" title="ราคาขายให้ลูกค้า (บาท)" :value="typePrice(c, g.category, t.type)" @input="setTypePrice(c, g.category, t.type, $event.target.value)" class="w-20 sm:w-24 p-1.5 border rounded text-right bg-white">
+                                                        <button @click="addOffer(c, g.category, t.type)" :disabled="hasOffer(c, g.category, t.type)" class="bg-indigo-500 text-white px-3 py-1.5 rounded text-xs hover:bg-indigo-600 disabled:opacity-40 whitespace-nowrap">{{ hasOffer(c, g.category, t.type) ? 'เสนอแล้ว' : '+ เสนอ' }}</button>
                                                     </span>
                                                 </div>
                                             </div>
@@ -269,49 +306,51 @@
                                     </div>
                                     <!-- เสนอสินค้า/ราคา -->
                                     <div>
-                                        <h4 class="font-semibold mb-2 text-indigo-600"><i class="fas fa-tags"></i> เสนอสินค้า/ราคาให้ลูกค้า (แสดงที่ปุ่ม "เสนอราคา" ในหน้า "ตรวจสอบสถานะ" ของหน้าบ้าน)</h4>
+                                        <h4 class="font-semibold mb-2 text-indigo-600 text-sm sm:text-base"><i class="fas fa-tags"></i> เสนอสินค้า/ราคาให้ลูกค้า</h4>
                                         <div class="bg-gray-50 p-3 rounded text-sm space-y-3">
                                             <div v-if="draftOffers(c).length">
-                                                <p class="text-xs text-gray-500 mb-1">ข้อเสนอที่จะส่งให้ลูกค้า (ช่องซ้าย = ต้นทุน ลูกค้าไม่เห็น · ช่องขวา = ราคาขายรวมอะไหล่และค่าซ่อม)</p>
-                                                <div v-for="(o, idx) in draftOffers(c)" :key="o.id" class="flex items-center gap-2 py-1">
-                                                    <span class="flex-1">{{ idx + 1 }}. {{ o.category }} · {{ o.type }} · {{ o.model }}</span>
-                                                    <input type="number" min="0" :value="o.cost" @input="setOfferCost(c, idx, $event.target.value)" placeholder="ต้นทุน" title="ต้นทุน (ลูกค้าไม่เห็น)" class="w-24 p-1 border rounded text-right">
-                                                    <input type="number" min="0" :value="o.price" @input="setOfferPrice(c, idx, $event.target.value)" placeholder="ราคาขาย" title="ราคาขายให้ลูกค้า" class="w-24 p-1 border rounded text-right">
-                                                    <button @click="removeOffer(c, idx)" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button>
+                                                <p class="text-xs text-gray-500 mb-1">ข้อเสนอที่จะส่งให้ลูกค้า (ซ้าย = ต้นทุน · ขวา = ราคาขาย)</p>
+                                                <div v-for="(o, idx) in draftOffers(c)" :key="o.id" class="flex flex-col sm:flex-row sm:items-center gap-2 py-1.5 border-b last:border-0">
+                                                    <span class="flex-1 text-xs sm:text-sm">{{ idx + 1 }}. {{ o.category }} · {{ o.type }} · {{ o.model }}</span>
+                                                    <div class="flex items-center gap-1.5 sm:gap-2">
+                                                        <input type="number" min="0" :value="o.cost" @input="setOfferCost(c, idx, $event.target.value)" placeholder="ต้นทุน" class="w-20 sm:w-24 p-1.5 border rounded text-right bg-white">
+                                                        <input type="number" min="0" :value="o.price" @input="setOfferPrice(c, idx, $event.target.value)" placeholder="ราคาขาย" class="w-20 sm:w-24 p-1.5 border rounded text-right bg-white">
+                                                        <button @click="removeOffer(c, idx)" class="text-red-400 hover:text-red-600 p-1"><i class="fas fa-trash"></i></button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <p v-else class="text-gray-400">ยังไม่ได้เลือกอะไหล่ที่จะเสนอ — ใส่ราคาในรายการ "เช็คอะไหล่ในคลัง" ด้านบน แล้วกด "+ เสนอ"</p>
+                                            <p v-else class="text-gray-400 text-xs sm:text-sm">ยังไม่ได้เลือกอะไหล่ที่จะเสนอ — ใส่ราคาในรายการ "เช็คอะไหล่ในคลัง" ด้านบน แล้วกด "+ เสนอ"</p>
                                             <div class="flex items-center gap-3 flex-wrap">
                                                 <button @click="sendOffers(c)" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"><i class="fas fa-paper-plane"></i> ส่งข้อเสนอราคา</button>
                                                 <span v-if="offerDrafts[c.id]" class="text-xs text-orange-500">มีการแก้ไขที่ยังไม่ได้ส่ง</span>
                                             </div>
-                                            <p v-if="c.offers && c.offers.length" class="text-sm border-t pt-3">
+                                            <p v-if="c.offers && c.offers.length" class="text-xs sm:text-sm border-t pt-3">
                                                 <span v-if="c.decision === 'accept'" class="text-green-600 font-semibold"><i class="fas fa-check-circle"></i> ลูกค้าเลือกซ่อม: {{ offerLabel(c, c.chosen) }} <span class="font-normal text-gray-400">({{ c.decision_date }})</span></span>
                                                 <span v-else-if="c.decision === 'decline'" class="text-red-600 font-semibold"><i class="fas fa-times-circle"></i> ลูกค้าไม่ซ่อม <span class="font-normal text-gray-400">({{ c.decision_date }})</span></span>
                                                 <span v-else class="text-gray-500"><i class="fas fa-hourglass-half"></i> ส่งข้อเสนอแล้ว {{ c.offer_date }} · รอลูกค้าตัดสินใจ</span>
                                             </p>
                                         </div>
                                     </div>
-                                    <!-- งานซ่อมเพิ่มเติม (ระหว่างซ่อม: เสนอได้เมื่อลูกค้ายืนยันซ่อมแล้ว) -->
+                                    <!-- งานซ่อมเพิ่มเติม -->
                                     <div v-if="c.decision === 'accept'">
-                                        <h4 class="font-semibold mb-2 text-amber-600"><i class="fas fa-screwdriver-wrench"></i> เสนองานซ่อมเพิ่มเติม (ระหว่างซ่อม) <span class="text-xs font-normal text-gray-500">· เพิ่มเข้าบิลได้เลย ไม่ต้องรอลูกค้ายืนยัน · รวมในใบเสร็จ (ไม่รวมในใบแจ้งซ่อมก่อนซ่อม) · ตัดสต็อกและออกใบเบิกเมื่อซ่อมเสร็จ</span></h4>
+                                        <h4 class="font-semibold mb-2 text-amber-600 text-sm sm:text-base"><i class="fas fa-screwdriver-wrench"></i> เสนองานซ่อมเพิ่มเติม (ระหว่างซ่อม) <span class="block sm:inline text-xs font-normal text-gray-500">· เพิ่มเข้าบิลได้เลย · รวมในใบเสร็จและใบเบิกเมื่อซ่อมเสร็จ</span></h4>
                                         <div class="bg-amber-50 p-3 rounded text-sm space-y-3">
                                             <div v-if="(c.addons || []).length" class="space-y-1">
-                                                <div v-for="a in c.addons" :key="a.id" class="flex items-center justify-between gap-2 py-1 border-b last:border-0">
-                                                    <span class="flex-1">{{ a.category }} · {{ a.type }} · {{ a.model }}</span>
+                                                <div v-for="a in c.addons" :key="a.id" class="flex flex-wrap items-center justify-between gap-2 py-1.5 border-b last:border-0 text-xs sm:text-sm">
+                                                    <span class="flex-1 min-w-[160px]">{{ a.category }} · {{ a.type }} · {{ a.model }}</span>
                                                     <span class="text-xs text-gray-500 whitespace-nowrap">ขาย {{ baht(a.price) }} · ทุน {{ baht(a.cost) }}</span>
-                                                    <span class="text-xs text-green-600 font-semibold whitespace-nowrap"><i class="fas fa-check-circle"></i> เพิ่มในบิลแล้ว ({{ a.offer_date }})</span>
-                                                    <button @click="removeAddon(c, a)" class="text-red-400 hover:text-red-600" title="ลบรายการนี้ออกจากบิล"><i class="fas fa-trash"></i></button>
+                                                    <span class="text-xs text-green-600 font-semibold whitespace-nowrap"><i class="fas fa-check-circle"></i> เพิ่มในบิลแล้ว</span>
+                                                    <button @click="removeAddon(c, a)" class="text-red-400 hover:text-red-600 p-1" title="ลบรายการนี้ออกจากบิล"><i class="fas fa-trash"></i></button>
                                                 </div>
                                             </div>
                                             <div v-for="g in stockCheck(c, true)" :key="g.category">
                                                 <p class="font-semibold">{{ g.category }}</p>
-                                                <div v-for="t in g.types" :key="t.type" class="flex items-center justify-between gap-2 py-1 pl-2 border-b last:border-0">
-                                                    <span>{{ t.type }} - <span :class="t.qty > 0 ? 'text-green-600' : 'text-red-600 font-bold'">{{ t.qty > 0 ? 'คงเหลือ: ' + t.qty + ' ชิ้น' : 'หมด / ไม่มีในคลัง' }}</span></span>
-                                                    <span class="flex items-center gap-2">
-                                                        <input type="number" min="0" placeholder="ต้นทุน" title="ต้นทุน (บาท) — ลูกค้าไม่เห็น" :value="addonVal(c, g.category, t.type, 'cost')" @input="setAddonVal(c, g.category, t.type, 'cost', $event.target.value)" class="w-24 p-1 border rounded text-right">
-                                                        <input type="number" min="0" placeholder="ราคาขาย" title="ราคาขายให้ลูกค้า (บาท)" :value="addonVal(c, g.category, t.type, 'price')" @input="setAddonVal(c, g.category, t.type, 'price', $event.target.value)" class="w-24 p-1 border rounded text-right">
-                                                        <button @click="addAddon(c, g.category, t.type)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">+ เพิ่มในบิล</button>
+                                                <div v-for="t in g.types" :key="t.type" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 pl-2 border-b last:border-0">
+                                                    <span class="text-xs sm:text-sm">{{ t.type }} - <span :class="t.qty > 0 ? 'text-green-600' : 'text-red-600 font-bold'">{{ t.qty > 0 ? 'คงเหลือ: ' + t.qty + ' ชิ้น' : 'หมด / ไม่มีในคลัง' }}</span></span>
+                                                    <span class="flex items-center gap-1.5 sm:gap-2">
+                                                        <input type="number" min="0" placeholder="ต้นทุน" :value="addonVal(c, g.category, t.type, 'cost')" @input="setAddonVal(c, g.category, t.type, 'cost', $event.target.value)" class="w-20 sm:w-24 p-1.5 border rounded text-right bg-white">
+                                                        <input type="number" min="0" placeholder="ราคาขาย" :value="addonVal(c, g.category, t.type, 'price')" @input="setAddonVal(c, g.category, t.type, 'price', $event.target.value)" class="w-20 sm:w-24 p-1.5 border rounded text-right bg-white">
+                                                        <button @click="addAddon(c, g.category, t.type)" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs hover:bg-blue-700 whitespace-nowrap">+ เพิ่มในบิล</button>
                                                     </span>
                                                 </div>
                                             </div>
@@ -319,15 +358,15 @@
                                     </div>
                                     <!-- ข้อความกับลูกค้า -->
                                     <div>
-                                        <h4 class="font-semibold mb-2 text-gray-700"><i class="fas fa-comment-dots"></i> ข้อความกับลูกค้า <span class="text-xs font-normal text-gray-500">· ลูกค้าเห็นและตอบกลับได้ในหน้า "รายละเอียดเคส" ของหน้าบ้าน เช่น แจ้งราคา / ระยะเวลาซ่อม</span> <span v-if="awaiting(c)" class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">ลูกค้าส่งข้อความ รอตอบ</span></h4>
+                                        <h4 class="font-semibold mb-2 text-gray-700 text-sm sm:text-base"><i class="fas fa-comment-dots"></i> ข้อความกับลูกค้า <span v-if="awaiting(c)" class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">ลูกค้าส่งข้อความ รอตอบ</span></h4>
                                         <chat-thread :msgs="msgs(c)" me="admin" :send="(t, id) => sendMsg(c, t, id)" :room="rooms[c.id] || ''" @live="l => mergeLive(c.id, l)" height="h-56"></chat-thread>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2 border-t pt-4">
-                                        <button v-if="c.status !== 'รออะไหล่'" @click="setStatus(c, 'รออะไหล่')" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">รออะไหล่</button>
-                                        <button v-else @click="setStatus(c, 'กำลังดำเนินการ')" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-600"><i class="fas fa-rotate-left"></i> กลับมากำลังดำเนินการ</button>
-                                        <button @click="completeCase(c)" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-600"><i class="fas fa-check"></i> ซ่อมเสร็จสิ้น</button>
-                                        <button @click="cancelCase(c)" class="border border-red-400 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-50"><i class="fas fa-ban"></i> ยกเลิกงานซ่อม</button>
-                                        <span class="text-xs text-gray-500 pl-2">ซ่อมเสร็จ = ตัดสต็อกอะไหล่ทุกชิ้นที่ลูกค้ารับ (ชิ้นละ 1) + ออกใบเบิกสินค้าที่หน้า "5. รายการบัญชี"</span>
+                                        <button v-if="c.status !== 'รออะไหล่'" @click="setStatus(c, 'รออะไหล่')" class="bg-blue-600 text-white px-3.5 py-2 rounded text-xs sm:text-sm hover:bg-blue-700">รออะไหล่</button>
+                                        <button v-else @click="setStatus(c, 'กำลังดำเนินการ')" class="bg-blue-600 text-white px-3.5 py-2 rounded text-xs sm:text-sm hover:bg-blue-700"><i class="fas fa-rotate-left"></i> กลับมากำลังดำเนินการ</button>
+                                        <button @click="completeCase(c)" class="bg-blue-600 text-white px-3.5 py-2 rounded text-xs sm:text-sm hover:bg-blue-700"><i class="fas fa-check"></i> ซ่อมเสร็จสิ้น</button>
+                                        <button @click="cancelCase(c)" class="border border-red-400 text-red-600 px-3.5 py-2 rounded text-xs sm:text-sm hover:bg-red-50"><i class="fas fa-ban"></i> ยกเลิกงานซ่อม</button>
+                                        <span class="text-xs text-gray-500 w-full sm:w-auto sm:pl-2">ซ่อมเสร็จ = ตัดสต็อกอะไหล่ที่ลูกค้ารับ + ออกใบเบิกที่หน้า "5. รายการบัญชี"</span>
                                     </div>
                                 </div>
                             </div>
@@ -335,30 +374,30 @@
                         </div>
                     </div>
 
-                    <!-- หน้า 5: รายการบัญชี + ใบเบิกสินค้า (เฉพาะงานที่ซ่อมเสร็จสิ้น) -->
+                    <!-- หน้า 5: รายการบัญชี + ใบเบิกสินค้า -->
                     <div v-if="adminTab === 'accounting'">
-                        <h2 class="text-2xl font-bold mb-2">รายการบัญชี / ใบเบิกสินค้า</h2>
-                        <p class="text-sm text-gray-500 mb-6">เฉพาะงานที่ซ่อมเสร็จสิ้นแล้ว · เมื่อกด "ซ่อมเสร็จสิ้น" ระบบจะตัดสต็อกอะไหล่ที่ใช้ 1 ชิ้นและออกใบเบิกสินค้าให้ที่หน้านี้ · ต้นทุนและยอดขายแก้ไขเองได้ (ล้างช่องเพื่อกลับไปใช้ค่าอัตโนมัติ)</p>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-blue-500">
-                                <h4 class="text-gray-500 text-sm">งานที่เสร็จแล้ว</h4>
-                                <p class="text-3xl font-bold">{{ accTotals.count }} <span class="text-sm font-normal text-gray-400">งาน</span></p>
+                        <h2 class="text-xl sm:text-2xl font-bold mb-2">รายการบัญชี / ใบเบิกสินค้า</h2>
+                        <p class="text-xs sm:text-sm text-gray-500 mb-5">เฉพาะงานที่ซ่อมเสร็จสิ้นแล้ว · ต้นทุนและยอดขายแก้ไขเองได้ (ล้างช่องเพื่อกลับไปใช้ค่าอัตโนมัติ)</p>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+                            <div class="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-blue-500">
+                                <h4 class="text-gray-500 text-xs sm:text-sm">งานที่เสร็จแล้ว</h4>
+                                <p class="text-2xl sm:text-3xl font-bold">{{ accTotals.count }} <span class="text-xs sm:text-sm font-normal text-gray-400">งาน</span></p>
                             </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-indigo-500">
-                                <h4 class="text-gray-500 text-sm">ยอดขายรวม</h4>
-                                <p class="text-2xl font-bold text-indigo-600">{{ baht(accTotals.sale) }}</p>
+                            <div class="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-indigo-500">
+                                <h4 class="text-gray-500 text-xs sm:text-sm">ยอดขายรวม</h4>
+                                <p class="text-lg sm:text-2xl font-bold text-indigo-600">{{ baht(accTotals.sale) }}</p>
                             </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-red-500">
-                                <h4 class="text-gray-500 text-sm">ต้นทุนรวม</h4>
-                                <p class="text-2xl font-bold text-red-600">{{ baht(accTotals.cost) }}</p>
+                            <div class="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-red-500">
+                                <h4 class="text-gray-500 text-xs sm:text-sm">ต้นทุนรวม</h4>
+                                <p class="text-lg sm:text-2xl font-bold text-red-600">{{ baht(accTotals.cost) }}</p>
                             </div>
-                            <div class="bg-white p-6 rounded shadow border-l-4 border-green-600">
-                                <h4 class="text-gray-500 text-sm">กำไรรวม <span class="text-xs">({{ accTotals.margin.toFixed(1) }}%)</span></h4>
-                                <p class="text-2xl font-bold" :class="accTotals.profit < 0 ? 'text-red-600' : 'text-green-600'">{{ baht(accTotals.profit) }}</p>
+                            <div class="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-green-600">
+                                <h4 class="text-gray-500 text-xs sm:text-sm">กำไรรวม <span class="text-[11px]">({{ accTotals.margin.toFixed(1) }}%)</span></h4>
+                                <p class="text-lg sm:text-2xl font-bold" :class="accTotals.profit < 0 ? 'text-red-600' : 'text-green-600'">{{ baht(accTotals.profit) }}</p>
                             </div>
                         </div>
                         <div class="bg-white rounded shadow overflow-x-auto">
-                            <table class="w-full text-left text-sm">
+                            <table class="w-full text-left text-xs sm:text-sm min-w-[780px]">
                                 <thead class="bg-gray-50 border-b">
                                     <tr>
                                         <th class="p-3">ใบเบิก / วัน-เวลา</th>
@@ -397,17 +436,17 @@
                                                 <span v-else-if="r.req" class="inline-block mt-1 text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">ไม่ได้ตัดสต็อก: {{ p.note }}</span>
                                             </div>
                                             <span v-if="!r.parts.length" class="text-gray-400">-</span>
-                                            <span v-if="r.unset" class="block text-xs text-orange-500">ยังไม่ได้ระบุยอด (ไม่มีข้อเสนอที่ลูกค้าเลือก)</span>
+                                            <span v-if="r.unset" class="block text-xs text-orange-500">ยังไม่ได้ระบุยอด</span>
                                         </td>
-                                        <td class="p-3 text-right"><input type="number" min="0" :value="r.cost" @change="accSet(r.c, 'acc_cost', $event.target.value)" class="w-28 p-1 border rounded text-right text-red-600"></td>
-                                        <td class="p-3 text-right"><input type="number" min="0" :value="r.sale" @change="accSet(r.c, 'acc_sale', $event.target.value)" class="w-28 p-1 border rounded text-right text-indigo-600"></td>
+                                        <td class="p-3 text-right"><input type="number" min="0" :value="r.cost" @change="accSet(r.c, 'acc_cost', $event.target.value)" class="w-24 sm:w-28 p-1 border rounded text-right text-red-600"></td>
+                                        <td class="p-3 text-right"><input type="number" min="0" :value="r.sale" @change="accSet(r.c, 'acc_sale', $event.target.value)" class="w-24 sm:w-28 p-1 border rounded text-right text-indigo-600"></td>
                                         <td class="p-3 text-right whitespace-nowrap">
                                             <span class="font-bold" :class="r.profit < 0 ? 'text-red-600' : 'text-green-600'">{{ baht(r.profit) }}</span>
                                             <span class="block text-xs" :class="r.profit < 0 ? 'text-red-400' : 'text-green-500'">{{ r.margin.toFixed(1) }}%</span>
                                         </td>
-                                        <td class="p-3 text-center">
-                                            <button v-if="r.req" @click="slip = r" class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 whitespace-nowrap"><i class="fas fa-file-invoice"></i> ดูใบเบิก</button>
-                                            <button @click="receiptId = r.id" class="mt-1 bg-indigo-500 text-white px-3 py-1 rounded text-xs hover:bg-indigo-600 whitespace-nowrap"><i class="fas fa-receipt"></i> ใบเสร็จ</button>
+                                        <td class="p-3 text-center space-y-1">
+                                            <button v-if="r.req" @click="slip = r" class="block w-full bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 whitespace-nowrap"><i class="fas fa-file-invoice"></i> ดูใบเบิก</button>
+                                            <button @click="receiptId = r.id" class="block w-full bg-indigo-500 text-white px-3 py-1 rounded text-xs hover:bg-indigo-600 whitespace-nowrap"><i class="fas fa-receipt"></i> ใบเสร็จ</button>
                                         </td>
                                     </tr>
                                     <tr v-if="!ledger.length"><td colspan="7" class="p-6 text-center text-gray-400">ยังไม่มีงานที่ซ่อมเสร็จสิ้น</td></tr>
@@ -428,34 +467,36 @@
                     <!-- หน้า 4: คลังสินค้า -->
                     <div v-if="adminTab === 'inventory'">
                         <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
-                            <h2 class="text-2xl font-bold">ระบบคลังสินค้า</h2>
-                            <div class="flex gap-2">
-                                <button @click="addCategory" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm"><i class="fas fa-folder-plus"></i> หมวดหมู่</button>
-                                <button v-if="invTab" @click="addType" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm"><i class="fas fa-tag"></i> ประเภทใน "{{ invTab }}"</button>
-                                <button @click="openItem()" class="bg-blue-600 text-white px-4 py-2 rounded"><i class="fas fa-plus"></i> เพิ่มรายการ</button>
+                            <h2 class="text-xl sm:text-2xl font-bold">ระบบคลังสินค้า</h2>
+                            <div class="flex flex-wrap gap-2">
+                                <button @click="addCategory" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-xs sm:text-sm"><i class="fas fa-folder-plus"></i> หมวดหมู่</button>
+                                <button v-if="invTab" @click="addType" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-xs sm:text-sm"><i class="fas fa-tag"></i> ประเภทใน "{{ invTab }}"</button>
+                                <button @click="openItem()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded text-xs sm:text-sm"><i class="fas fa-plus"></i> เพิ่มรายการ</button>
                             </div>
                         </div>
-                        <div class="flex gap-2 mb-4 flex-wrap">
-                            <button v-for="t in ['', ...Object.keys(inv.categories)]" :key="t" @click="invTab = t" :class="invTab === t ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'" class="px-4 py-1 rounded-full text-sm">{{ t || 'ทั้งหมด' }}</button>
+                        <div class="flex gap-1.5 sm:gap-2 mb-4 flex-wrap">
+                            <button v-for="t in ['', ...Object.keys(inv.categories)]" :key="t" @click="invTab = t" :class="invTab === t ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'" class="px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm">{{ t || 'ทั้งหมด' }}</button>
                         </div>
-                        <div v-for="g in invGroups" :key="g.category" class="bg-white rounded shadow mb-6 overflow-hidden">
-                            <div class="bg-blue-600 text-white px-4 py-2 font-bold">{{ g.category }}</div>
+                        <div v-for="g in invGroups" :key="g.category" class="bg-white rounded shadow mb-5 overflow-hidden">
+                            <div class="bg-blue-600 text-white px-4 py-2 font-bold text-sm sm:text-base">{{ g.category }}</div>
                             <div v-for="t in g.types" :key="t.type">
-                                <div class="bg-gray-50 border-t px-4 py-2 text-sm font-semibold text-blue-700">ประเภท: {{ t.type }}</div>
-                                <table class="w-full text-left text-sm"><tbody>
-                                    <tr v-for="i in t.items" :key="i.id" class="border-t hover:bg-gray-50">
-                                        <td class="p-3 text-gray-500 w-32">{{ i.id }}</td>
-                                        <td class="p-3 font-medium">{{ i.model }}</td>
-                                        <td class="p-3 text-right text-gray-500">ทุน {{ i.cost ? baht(i.cost) : '-' }}</td>
-                                        <td class="p-3 text-right text-gray-600">ขาย {{ i.price ? baht(i.price) : '-' }}</td>
-                                        <td class="p-3 text-right font-bold" :class="i.qty < 5 ? 'text-red-500' : 'text-green-600'">{{ i.qty }}</td>
-                                        <td class="p-3 text-center w-28">
-                                            <button @click="openItem(i)" class="text-blue-500 hover:text-blue-700 mx-1"><i class="fas fa-edit"></i></button>
-                                            <button @click="delItem(i)" class="text-red-400 hover:text-red-600 mx-1"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr v-if="!t.items.length"><td colspan="6" class="p-3 text-gray-400">ยังไม่มีรายการ</td></tr>
-                                </tbody></table>
+                                <div class="bg-gray-50 border-t px-4 py-2 text-xs sm:text-sm font-semibold text-blue-700">ประเภท: {{ t.type }}</div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left text-xs sm:text-sm min-w-[520px]"><tbody>
+                                        <tr v-for="i in t.items" :key="i.id" class="border-t hover:bg-gray-50">
+                                            <td class="p-3 text-gray-500 w-28 whitespace-nowrap">{{ i.id }}</td>
+                                            <td class="p-3 font-medium">{{ i.model }}</td>
+                                            <td class="p-3 text-right text-gray-500 whitespace-nowrap">ทุน {{ i.cost ? baht(i.cost) : '-' }}</td>
+                                            <td class="p-3 text-right text-gray-600 whitespace-nowrap">ขาย {{ i.price ? baht(i.price) : '-' }}</td>
+                                            <td class="p-3 text-right font-bold whitespace-nowrap" :class="i.qty < 5 ? 'text-red-500' : 'text-green-600'">{{ i.qty }}</td>
+                                            <td class="p-3 text-center w-24 whitespace-nowrap">
+                                                <button @click="openItem(i)" class="text-blue-500 hover:text-blue-700 mx-1 p-1"><i class="fas fa-edit"></i></button>
+                                                <button @click="delItem(i)" class="text-red-400 hover:text-red-600 mx-1 p-1"><i class="fas fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="!t.items.length"><td colspan="6" class="p-3 text-gray-400">ยังไม่มีรายการ</td></tr>
+                                    </tbody></table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -463,70 +504,72 @@
                     </div>
                     </transition>
 
-                    <!-- Modal: ข้อความกับลูกค้า (เปิดได้จากทุกเคส ไม่ว่าสถานะใด) -->
+                    <!-- Modal: ข้อความกับลูกค้า -->
                     <transition name="modal">
-                    <div v-if="chatCurrent" @click.self="chatId = ''" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
-                        <div class="bg-white rounded-lg w-full max-w-lg p-5 modal-card">
+                    <div v-if="chatCurrent" @click.self="chatId = ''" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4 no-print">
+                        <div class="bg-white rounded-lg w-full max-w-lg p-4 sm:p-5 modal-card">
                             <div class="flex justify-between items-start mb-3 gap-3">
                                 <div class="min-w-0">
-                                    <h3 class="font-bold text-lg"><i class="fas fa-comments text-blue-600"></i> ข้อความ · {{ chatCurrent.id }} <span :class="badge(chatCurrent.status)" class="ml-1 px-2 py-0.5 rounded-full text-xs font-normal align-middle">{{ chatCurrent.status }}</span></h3>
-                                    <p class="text-xs text-gray-500">{{ chatCurrent.name }} · {{ chatCurrent.phone }} · {{ chatCurrent.model }}</p>
+                                    <h3 class="font-bold text-base sm:text-lg"><i class="fas fa-comments text-blue-600"></i> ข้อความ · {{ chatCurrent.id }} <span :class="badge(chatCurrent.status)" class="ml-1 px-2 py-0.5 rounded-full text-xs font-normal align-middle">{{ chatCurrent.status }}</span></h3>
+                                    <p class="text-xs text-gray-500 truncate">{{ chatCurrent.name }} · {{ chatCurrent.phone }} · {{ chatCurrent.model }}</p>
                                 </div>
-                                <button @click="chatId = ''" class="text-gray-400 hover:text-gray-600" title="ปิด"><i class="fas fa-times"></i></button>
+                                <button @click="chatId = ''" class="text-gray-400 hover:text-gray-600 p-1" title="ปิด"><i class="fas fa-times"></i></button>
                             </div>
-                            <chat-thread :msgs="msgs(chatCurrent)" me="admin" :send="(t, id) => sendMsg(chatCurrent, t, id)" :room="rooms[chatCurrent.id] || ''" @live="l => mergeLive(chatCurrent.id, l)" height="h-72"></chat-thread>
+                            <chat-thread :msgs="msgs(chatCurrent)" me="admin" :send="(t, id) => sendMsg(chatCurrent, t, id)" :room="rooms[chatCurrent.id] || ''" @live="l => mergeLive(chatCurrent.id, l)" height="h-64 sm:h-72"></chat-thread>
                         </div>
                     </div>
                     </transition>
-                    <!-- Modal: ขยายรูป -->
-                    <transition name="modal"><div v-if="photoCase" @click.self="photoId = ''" class="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4 no-print"><div class="bg-white rounded-lg w-full max-w-3xl p-5 modal-card max-h-full overflow-y-auto"><div class="flex justify-between items-center mb-3"><h3 class="font-bold"><i class="fas fa-images text-blue-600"></i> รูปจากลูกค้า · {{ photoCase.id }} · {{ photoCase.model }}</h3><button @click="photoId = ''" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button></div><div v-if="photos(photoCase).length" class="grid grid-cols-2 gap-3"><img v-for="(p, i) in photos(photoCase)" :key="i" :src="p" @click="zoom = p" class="h-48 w-full object-cover rounded border cursor-pointer hover:opacity-80"></div><p v-else class="text-sm text-gray-400">ไม่มีรูปแนบ</p><p v-if="photoCase.problem_desc" class="mt-3 text-sm"><b>อาการที่ลูกค้าแจ้ง:</b> {{ photoCase.problem_desc }}</p></div></div></transition>
+                    <!-- Modal: ดูรูปเคสงานใหม่ / ขยายรูป -->
+                    <transition name="modal"><div v-if="photoCase" @click.self="photoId = ''" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4 no-print"><div class="bg-white rounded-lg w-full max-w-3xl p-4 sm:p-5 modal-card max-h-full overflow-y-auto"><div class="flex justify-between items-center mb-3"><h3 class="font-bold text-sm sm:text-base"><i class="fas fa-images text-blue-600"></i> รูปจากลูกค้า · {{ photoCase.id }} · {{ photoCase.model }}</h3><button @click="photoId = ''" class="text-gray-400 hover:text-gray-600 p-1"><i class="fas fa-times"></i></button></div><div v-if="photos(photoCase).length" class="grid grid-cols-2 gap-2.5 sm:gap-3"><img v-for="(p, i) in photos(photoCase)" :key="i" :src="p" @click="zoom = p" class="h-36 sm:h-48 w-full object-cover rounded border cursor-pointer hover:opacity-80"></div><p v-else class="text-sm text-gray-400">ไม่มีรูปแนบ</p><p v-if="photoCase.problem_desc" class="mt-3 text-sm"><b>อาการที่ลูกค้าแจ้ง:</b> {{ photoCase.problem_desc }}</p></div></div></transition>
                     <transition name="modal"><div v-if="zoom" @click="zoom = ''" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><img :src="zoom" class="max-h-full max-w-full rounded modal-card"></div></transition>
                     <!-- แจ้งเตือนสั้นๆ -->
-                    <transition name="modal"><div v-if="toast" class="fixed bottom-6 right-6 z-50 bg-blue-700 text-white px-5 py-3 rounded shadow-lg text-sm max-w-sm no-print">{{ toast }}</div></transition>
+                    <transition name="modal"><div v-if="toast" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 bg-blue-700 text-white px-4 py-3 rounded shadow-lg text-sm sm:max-w-sm no-print">{{ toast }}</div></transition>
                     <!-- Modal: ใบเบิกสินค้า -->
                     <transition name="modal">
-                    <div v-if="slip" @click.self="slip = null" class="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
-                        <div id="slip" class="bg-white rounded-lg w-full max-w-xl p-8 my-8 modal-card">
+                    <div v-if="slip" @click.self="slip = null" class="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+                        <div id="slip" class="bg-white rounded-lg w-full max-w-xl p-5 sm:p-8 my-4 sm:my-8 modal-card">
                             <div class="text-center border-b pb-4 mb-4">
-                                <h3 class="text-2xl font-bold text-gray-900">ใบเบิกสินค้า</h3>
-                                <p class="text-sm text-gray-500">ร้านซ่อมมือถือ · ระบบหลังบ้าน</p>
+                                <h3 class="text-xl sm:text-2xl font-bold text-gray-900">ใบเบิกสินค้า</h3>
+                                <p class="text-xs sm:text-sm text-gray-500">ร้านซ่อมมือถือ · ระบบหลังบ้าน</p>
                             </div>
-                            <div class="grid grid-cols-2 gap-y-1 gap-x-4 text-sm mb-4">
+                            <div class="grid grid-cols-2 gap-y-1 gap-x-3 text-xs sm:text-sm mb-4">
                                 <p><span class="text-gray-500">เลขที่ใบเบิก:</span> <b>{{ slip.req ? slip.req.id : '-' }}</b></p>
-                                <p class="text-right"><span class="text-gray-500">วัน-เวลาที่เบิก:</span> <b>{{ slip.req ? fmtDT(slip.req.at) : '-' }}</b></p>
+                                <p class="text-right"><span class="text-gray-500">วัน-เวลา:</span> <b>{{ slip.req ? fmtDT(slip.req.at) : '-' }}</b></p>
                                 <p><span class="text-gray-500">อ้างอิงเคส:</span> <b>{{ slip.id }}</b></p>
                                 <p class="text-right"><span class="text-gray-500">ผู้เบิก:</span> <b>{{ staffName }}</b></p>
                                 <p><span class="text-gray-500">ลูกค้า:</span> {{ slip.name }} <span v-if="slip.phone">({{ slip.phone }})</span></p>
                                 <p class="text-right"><span class="text-gray-500">เครื่อง:</span> {{ slip.model }}</p>
                             </div>
-                            <table class="w-full text-sm border mb-4">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="p-2 text-left border">รายการอะไหล่</th>
-                                        <th class="p-2 border w-16">จำนวน</th>
-                                        <th class="p-2 text-right border w-28">ต้นทุน/ชิ้น</th>
-                                        <th class="p-2 text-right border w-28">ราคาขาย</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="(p, pi) in slip.parts" :key="pi">
-                                        <td class="p-2 border">
-                                            <b>{{ p.category }} · {{ p.type }}</b>
-                                            <span class="block text-xs text-gray-500">รุ่น {{ p.model }}<span v-if="p.item_id"> · รหัสคลัง {{ p.item_id }}</span><span v-if="p.kind === 'addon'"> · งานซ่อมเพิ่ม</span></span>
-                                        </td>
-                                        <td class="p-2 border text-center">{{ p.qty || 1 }}</td>
-                                        <td class="p-2 border text-right">{{ baht(p.cost) }}</td>
-                                        <td class="p-2 border text-right">{{ baht(p.price) }}</td>
-                                    </tr>
-                                    <tr v-if="!slip.parts.length"><td colspan="4" class="p-2 border text-center text-gray-400">ไม่มีรายการอะไหล่</td></tr>
-                                </tbody>
-                            </table>
-                            <div class="grid grid-cols-3 gap-3 text-center mb-4">
-                                <div class="bg-red-50 rounded p-3"><p class="text-xs text-gray-500">ต้นทุนรวม</p><p class="text-lg font-bold text-red-600">{{ baht(slip.cost) }}</p></div>
-                                <div class="bg-blue-50 rounded p-3"><p class="text-xs text-gray-500">ยอดขาย</p><p class="text-lg font-bold text-indigo-600">{{ baht(slip.sale) }}</p></div>
-                                <div :class="slip.profit < 0 ? 'bg-red-50' : 'bg-green-50'" class="rounded p-3"><p class="text-xs text-gray-500">กำไร ({{ slip.margin.toFixed(1) }}%)</p><p class="text-lg font-bold" :class="slip.profit < 0 ? 'text-red-600' : 'text-green-600'">{{ baht(slip.profit) }}</p></div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-xs sm:text-sm border mb-4">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="p-2 text-left border">รายการอะไหล่</th>
+                                            <th class="p-2 border w-14">จำนวน</th>
+                                            <th class="p-2 text-right border w-24">ต้นทุน/ชิ้น</th>
+                                            <th class="p-2 text-right border w-24">ราคาขาย</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(p, pi) in slip.parts" :key="pi">
+                                            <td class="p-2 border">
+                                                <b>{{ p.category }} · {{ p.type }}</b>
+                                                <span class="block text-xs text-gray-500">รุ่น {{ p.model }}<span v-if="p.item_id"> · รหัสคลัง {{ p.item_id }}</span><span v-if="p.kind === 'addon'"> · งานซ่อมเพิ่ม</span></span>
+                                            </td>
+                                            <td class="p-2 border text-center">{{ p.qty || 1 }}</td>
+                                            <td class="p-2 border text-right">{{ baht(p.cost) }}</td>
+                                            <td class="p-2 border text-right">{{ baht(p.price) }}</td>
+                                        </tr>
+                                        <tr v-if="!slip.parts.length"><td colspan="4" class="p-2 border text-center text-gray-400">ไม่มีรายการอะไหล่</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
-                            <div v-if="slip.req" class="text-sm mb-6 space-y-1">
+                            <div class="grid grid-cols-3 gap-2 sm:gap-3 text-center mb-4">
+                                <div class="bg-red-50 rounded p-2.5 sm:p-3"><p class="text-[11px] sm:text-xs text-gray-500">ต้นทุนรวม</p><p class="text-sm sm:text-lg font-bold text-red-600">{{ baht(slip.cost) }}</p></div>
+                                <div class="bg-blue-50 rounded p-2.5 sm:p-3"><p class="text-[11px] sm:text-xs text-gray-500">ยอดขาย</p><p class="text-sm sm:text-lg font-bold text-indigo-600">{{ baht(slip.sale) }}</p></div>
+                                <div :class="slip.profit < 0 ? 'bg-red-50' : 'bg-green-50'" class="rounded p-2.5 sm:p-3"><p class="text-[11px] sm:text-xs text-gray-500">กำไร ({{ slip.margin.toFixed(1) }}%)</p><p class="text-sm sm:text-lg font-bold" :class="slip.profit < 0 ? 'text-red-600' : 'text-green-600'">{{ baht(slip.profit) }}</p></div>
+                            </div>
+                            <div v-if="slip.req" class="text-xs sm:text-sm mb-6 space-y-1">
                                 <p v-for="(p, pi) in slip.parts" :key="pi" :class="p.stock_cut ? 'text-green-700' : 'text-orange-600'">
                                     <i class="fas fa-boxes"></i>
                                     {{ p.category }} · {{ p.type }}: {{ p.stock_cut ? 'ตัดสต็อกแล้ว คงเหลือ ' + p.stock_before + ' → ' + p.stock_after + ' ชิ้น' : 'ไม่ได้ตัดสต็อก: ' + p.note }}
@@ -543,17 +586,17 @@
                         </div>
                     </div>
                     </transition>
-                    <!-- Modal: ใบเสร็จรับเงิน (พิมพ์จากหลังบ้านเมื่อซ่อมเสร็จ) -->
+                    <!-- Modal: ใบเสร็จรับเงิน -->
                     <transition name="modal">
-                    <div v-if="receiptCase" @click.self="receiptId = ''" class="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
-                        <div id="receipt-print" class="bg-white rounded-lg w-full max-w-2xl p-8 my-8 modal-card text-gray-900">
+                    <div v-if="receiptCase" @click.self="receiptId = ''" class="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+                        <div id="receipt-print" class="bg-white rounded-lg w-full max-w-2xl p-5 sm:p-8 my-4 sm:my-8 modal-card text-gray-900">
                             <div class="text-center border-b-2 border-black pb-3 mb-4">
                                 <div class="text-2xl font-bold tracking-[0.3em]">OMIRIM</div>
                                 <div class="text-xs">ระบบตรวจสอบสภาพโทรศัพท์มือถือและจัดการคลังสินค้าในงานซ่อม</div>
                                 <div class="text-xs">ที่อยู่ร้าน: {{ shopAddress }}</div>
-                                <h3 class="text-xl font-bold mt-2">ใบเสร็จรับเงิน (งานซ่อม)</h3>
+                                <h3 class="text-lg sm:text-xl font-bold mt-2">ใบเสร็จรับเงิน (งานซ่อม)</h3>
                             </div>
-                            <table class="w-full text-sm mb-3">
+                            <table class="w-full text-xs sm:text-sm mb-3">
                                 <tbody>
                                     <tr><td class="py-0.5"><b>รหัสเคส:</b> {{ receiptCase.id }}</td><td class="py-0.5 text-right"><b>วันที่ซ่อมเสร็จ:</b> {{ fmtDate(doneAt(receiptCase)) }}</td></tr>
                                     <tr><td class="py-0.5"><b>ชื่อลูกค้า:</b> {{ receiptCase.name || '-' }}</td><td class="py-0.5 text-right"><b>เบอร์โทร:</b> {{ receiptCase.phone || '-' }}</td></tr>
@@ -562,31 +605,33 @@
                                     <tr v-if="receiptCase.received_at"><td colspan="2" class="py-0.5"><b>ร้านรับเครื่องเมื่อ:</b> {{ receiptCase.received_at }} · <b>ผู้รับเครื่อง:</b> {{ receiptCase.received_by || '-' }}</td></tr>
                                 </tbody>
                             </table>
-                            <table class="w-full text-sm border-collapse mb-3">
-                                <thead>
-                                    <tr>
-                                        <th class="border border-gray-800 p-2 w-12">ลำดับ</th>
-                                        <th class="border border-gray-800 p-2 text-left">รายการซ่อม</th>
-                                        <th class="border border-gray-800 p-2 text-right w-28">ราคา (บาท)</th>
-                                        <th class="border border-gray-800 p-2 text-left w-52">การรับประกัน</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="(ln, i) in billLines(receiptCase)" :key="ln.key" class="align-top">
-                                        <td class="border border-gray-800 p-2 text-center">{{ i + 1 }}</td>
-                                        <td v-if="!ln.parts" class="border border-gray-800 p-2">{{ ln.title }}<span class="block text-xs">รุ่น {{ ln.model }}</span></td>
-                                        <td v-else class="border border-gray-800 p-2">{{ ln.title }}<span v-for="p in ln.parts" :key="p.key" class="block text-xs">• {{ p.title }} · รุ่น {{ p.model }} · {{ baht(p.price) }}</span></td>
-                                        <td class="border border-gray-800 p-2 text-right">{{ baht(ln.price) }}</td>
-                                        <td v-if="!ln.parts" class="border border-gray-800 p-2">{{ warrantyText(ln.warranty, receiptCase) }}</td>
-                                        <td v-else class="border border-gray-800 p-2"><span v-for="p in ln.parts" :key="p.key" class="block text-xs">{{ p.title }}: {{ warrantyText(p.warranty, receiptCase) }}</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="2" class="border border-gray-800 p-2 text-right font-bold">รวมทั้งสิ้น</td>
-                                        <td class="border border-gray-800 p-2 text-right font-bold">{{ baht(totalOf(receiptCase)) }}</td>
-                                        <td class="border border-gray-800 p-2"></td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-xs sm:text-sm border-collapse mb-3">
+                                    <thead>
+                                        <tr>
+                                            <th class="border border-gray-800 p-2 w-10">ลำดับ</th>
+                                            <th class="border border-gray-800 p-2 text-left">รายการซ่อม</th>
+                                            <th class="border border-gray-800 p-2 text-right w-24">ราคา (บาท)</th>
+                                            <th class="border border-gray-800 p-2 text-left w-44">การรับประกัน</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(ln, i) in billLines(receiptCase)" :key="ln.key" class="align-top">
+                                            <td class="border border-gray-800 p-2 text-center">{{ i + 1 }}</td>
+                                            <td v-if="!ln.parts" class="border border-gray-800 p-2">{{ ln.title }}<span class="block text-xs">รุ่น {{ ln.model }}</span></td>
+                                            <td v-else class="border border-gray-800 p-2">{{ ln.title }}<span v-for="p in ln.parts" :key="p.key" class="block text-xs">• {{ p.title }} · รุ่น {{ p.model }} · {{ baht(p.price) }}</span></td>
+                                            <td class="border border-gray-800 p-2 text-right">{{ baht(ln.price) }}</td>
+                                            <td v-if="!ln.parts" class="border border-gray-800 p-2">{{ warrantyText(ln.warranty, receiptCase) }}</td>
+                                            <td v-else class="border border-gray-800 p-2"><span v-for="p in ln.parts" :key="p.key" class="block text-xs">{{ p.title }}: {{ warrantyText(p.warranty, receiptCase) }}</span></td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="2" class="border border-gray-800 p-2 text-right font-bold">รวมทั้งสิ้น</td>
+                                            <td class="border border-gray-800 p-2 text-right font-bold">{{ baht(totalOf(receiptCase)) }}</td>
+                                            <td class="border border-gray-800 p-2"></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                             <p class="text-xs mt-3">ระยะเวลารับประกันนับจากวันที่ซ่อมเสร็จ ตามประเภทอะไหล่ที่ระบุข้างต้น · ขอบคุณที่ใช้บริการ</p>
                             <div class="grid grid-cols-2 gap-10 mt-12 text-center text-xs">
                                 <div class="border-t border-gray-800 pt-1">ลายเซ็นผู้รับเครื่องคืน</div>
@@ -601,16 +646,16 @@
                     </transition>
                     <!-- Modal: เพิ่ม/แก้ไขอะไหล่ -->
                     <transition name="modal">
-                    <div v-if="itemForm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div class="bg-white p-6 rounded-lg w-96 space-y-3 modal-card">
+                    <div v-if="itemForm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                        <div class="bg-white p-5 sm:p-6 rounded-lg w-full max-w-sm space-y-3 modal-card">
                             <h3 class="font-bold text-lg">{{ itemForm.id ? 'แก้ไขรายการ' : 'เพิ่มรายการ' }}</h3>
-                            <select v-model="itemForm.category" @change="itemForm.type = ''" class="w-full p-3 border rounded"><option value="">-- หมวดหมู่ --</option><option v-for="(_, k) in inv.categories" :value="k">{{ k }}</option></select>
-                            <select v-model="itemForm.type" class="w-full p-3 border rounded"><option value="">-- ประเภท --</option><option v-for="t in (inv.categories[itemForm.category] || [])" :value="t">{{ t }}</option></select>
-                            <select v-model="itemForm.model" class="w-full p-3 border rounded"><option value="">-- รุ่นเครื่อง --</option><option v-for="m in iosModels" :value="m">{{ m }}</option></select>
+                            <select v-model="itemForm.category" @change="itemForm.type = ''" class="w-full p-3 border rounded bg-white"><option value="">-- หมวดหมู่ --</option><option v-for="(_, k) in inv.categories" :value="k">{{ k }}</option></select>
+                            <select v-model="itemForm.type" class="w-full p-3 border rounded bg-white"><option value="">-- ประเภท --</option><option v-for="t in (inv.categories[itemForm.category] || [])" :value="t">{{ t }}</option></select>
+                            <select v-model="itemForm.model" class="w-full p-3 border rounded bg-white"><option value="">-- รุ่นเครื่อง --</option><option v-for="m in iosModels" :value="m">{{ m }}</option></select>
                             <input v-model.number="itemForm.qty" type="number" min="0" placeholder="จำนวนคงเหลือ" class="w-full p-3 border rounded">
                             <input v-model.number="itemForm.cost" type="number" min="0" placeholder="ต้นทุนต่อชิ้น (บาท)" class="w-full p-3 border rounded">
                             <input v-model.number="itemForm.price" type="number" min="0" placeholder="ราคาขายที่เสนอให้ลูกค้า (บาท)" class="w-full p-3 border rounded">
-                            <div class="flex justify-end gap-2"><button @click="itemForm = null" class="px-4 py-2 rounded border">ยกเลิก</button><button @click="saveItem" class="px-4 py-2 rounded bg-blue-600 text-white">บันทึก</button></div>
+                            <div class="flex justify-end gap-2"><button @click="itemForm = null" class="px-4 py-2 rounded border">ยกเลิก</button><button @click="saveItem" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">บันทึก</button></div>
                         </div>
                     </div>
                     </transition>
@@ -620,17 +665,20 @@
         </div>
 
         <!-- เลขเวอร์ชัน (มุมล่างซ้าย) -->
-        <div class="fixed bottom-2 left-3 z-40 text-xs select-none pointer-events-none no-print" :class="currentView === 'admin-login' ? 'text-gray-500' : 'text-gray-400'">Version {{ version }}</div>
-
+        <div class="fixed bottom-2 left-3 z-30 text-xs select-none pointer-events-none no-print" :class="currentView === 'admin-login' ? 'text-gray-500' : 'text-gray-400'">Version {{ version }}</div>
 
     </div>
     <script>
-// วาง Web App URL ของ Google Apps Script ที่นี่ (ปล่อยว่าง = โหมดทดสอบ ใช้ localStorage ในเบราว์เซอร์เดียวกัน)
+// ล็อคการย่อ-ขยายหน้าจอบนมือถือ (ป้องกัน Pinch-Zoom และ Double-Tap Zoom บน iOS/Android)
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
 const API_URL = 'https://script.google.com/macros/s/AKfycby2tFlUq7jzuik9cWMtQ5MF8RCSn7Y55Z3y61zo5yj1OUKuH0lE13nuijMskBOeTror/exec';
 const KEY = 'repair_cases', INV_KEY = 'repair_inv';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.2';
 const normCase = c => (c && c.status === 'รอรับงาน' ? { ...c, status: 'รอรับงานซ่อม' } : c);
-// สถานะการซ่อม -> สีแถบสัดส่วน / สีป้ายสถานะ
 const STATUSES = [
     { key: 'รอรับงานซ่อม', bar: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
     { key: 'กำลังดำเนินการ', bar: 'bg-orange-500', badge: 'bg-orange-100 text-orange-600' },
@@ -638,37 +686,35 @@ const STATUSES = [
     { key: 'เสร็จสิ้น', bar: 'bg-green-500', badge: 'bg-green-100 text-green-700' },
     { key: 'ยกเลิก', bar: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
 ];
-// บัญชีหลังบ้าน: name = ชื่อที่บันทึกเป็นผู้รับเครื่อง / ผู้เบิก / ผู้รับเงิน (เพิ่มคนได้โดยเพิ่มแถวในรายการนี้)
 const STAFF = [
     { username: 'Admin', password: '112233', name: 'Admin' }
 ];
 const SHOP_ADDRESS = '25 124 หมู่ 3 สุรศักดิ์ อำเภอศรีราชา ชลบุรี 20110';
-// ระยะเวลารับประกัน (วัน) ตามหมวดและประเภทอะไหล่ — หมวด/ประเภทที่ไม่ได้ระบุ = 30 วัน
 const WARRANTY_DAYS = { 'หน้าจอ': { 'TFT': 30, 'OLED': 60, 'OR': 90 }, 'แบตเตอรี่': { 'งานธรรมดา': 90, 'งานขึ้นใช้แล้ว': 180, 'ของแท้แกะเครื่อง': 365 } };
 const DEFAULT_WARRANTY_DAYS = 30;
 const warrantyDays = (cat, type) => (WARRANTY_DAYS[cat] && WARRANTY_DAYS[cat][type]) || DEFAULT_WARRANTY_DAYS;
 const IOS = [
-                        'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 'iPhone 7', 'iPhone 7 Plus',
-                        'iPhone 8', 'iPhone 8 Plus', 'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
-                        'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max', 'iPhone 12 mini', 'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
-                        'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max', 'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
-                        'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max', 'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
-                        'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 18', 'iPhone 18 Pro', 'iPhone 18 Pro Max'
-                    ];
+    'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 'iPhone 7', 'iPhone 7 Plus',
+    'iPhone 8', 'iPhone 8 Plus', 'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+    'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max', 'iPhone 12 mini', 'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+    'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max', 'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max', 'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+    'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 18', 'iPhone 18 Pro', 'iPhone 18 Pro Max'
+];
 const SEED = [
-                        { id: 'OMP-0001', name: 'สมชาย ใจดี', nickname: 'ชาย', phone: '0812345678', model: 'iPhone 13 Pro', color: 'Blue', problem: 'หน้าจอเสีย', problem_desc: 'จอแตกมุมขวา', date: '2023-10-01', status: 'เสร็จสิ้น',
-                          offers: [{ id: 'O-DEMO1', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', price: 4500, cost: 3200 }], offer_date: '2023-10-02', decision: 'accept', chosen: 'O-DEMO1', decision_date: '2023-10-02',
-                          requisition: { id: 'RQ-DEMO1', at: '2023-10-03T10:30:00', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', qty: 1, item_id: 'INV-S01', cost: 3200, price: 4500, stock_before: 6, stock_after: 5, stock_cut: true, note: '' } },
-                        { id: 'OMP-0002', name: 'สมหญิง รักสวย', nickname: 'หญิง', phone: '0898765432', model: 'iPhone 11', color: 'Black', problem: 'แบตเสียหาย', problem_desc: 'แบตบวมดันจอ', date: '2023-10-15', status: 'กำลังดำเนินการ' }
-                    ];
-// อาการเสีย -> หมวดหมู่อะไหล่ที่ใช้เช็คคลัง ("อื่นๆ" = แสดงทุกหมวด)
+    { id: 'OMP-0001', name: 'สมชาย ใจดี', nickname: 'ชาย', phone: '0812345678', model: 'iPhone 13 Pro', color: 'Blue', problem: 'หน้าจอเสีย', problem_desc: 'จอแตกมุมขวา', date: '2023-10-01', status: 'เสร็จสิ้น',
+      offers: [{ id: 'O-DEMO1', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', price: 4500, cost: 3200 }], offer_date: '2023-10-02', decision: 'accept', chosen: 'O-DEMO1', decision_date: '2023-10-02',
+      requisition: { id: 'RQ-DEMO1', at: '2023-10-03T10:30:00', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', qty: 1, item_id: 'INV-S01', cost: 3200, price: 4500, stock_before: 6, stock_after: 5, stock_cut: true, note: '' } },
+    { id: 'OMP-0002', name: 'สมหญิง รักสวย', nickname: 'หญิง', phone: '0898765432', model: 'iPhone 11', color: 'Black', problem: 'แบตเสียหาย', problem_desc: 'แบตบวมดันจอ', date: '2023-10-15', status: 'กำลังดำเนินการ' }
+];
+// เชื่อมอาการ "เครื่องเปิดไม่ติด" และ "เมนบอร์ดช็อต" เข้ากับหมวดอะไหล่ "เมนบอร์ด"
 const PROBLEM_CAT = {
-    'หน้าจอเสีย': 'หน้าจอ', 'แบตเสียหาย': 'แบตเตอรี่', 'เครื่องเปิดไม่ติด': 'แพรชาร์จ',
+    'หน้าจอเสีย': 'หน้าจอ', 'แบตเสียหาย': 'แบตเตอรี่', 'เครื่องเปิดไม่ติด': 'เมนบอร์ด',
     'กล้องหลังและกระจกครอบเลนส์': 'กล้องหลัง', 'ระบบสแกนใบหน้า': 'Face ID',
     'กระจกฝาหลัง': 'กระจกฝาหลัง', 'เมนบอร์ดช็อต': 'เมนบอร์ด'
 };
 const DEF_INV = {
-    categories: { 'หน้าจอ': ['TFT', 'OLED', 'OR'], 'แบตเตอรี่': ['งานธรรมดา', 'งานขึ้นใช้แล้ว', 'ของแท้แกะเครื่อง'], 'แพรชาร์จ': ['งานเทียบ', 'ของแท้แกะเครื่อง'] },
+    categories: { 'หน้าจอ': ['TFT', 'OLED', 'OR'], 'แบตเตอรี่': ['งานธรรมดา', 'งานขึ้นใช้แล้ว', 'ของแท้แกะเครื่อง'], 'แพรชาร์จ': ['งานเทียบ', 'ของแท้แกะเครื่อง'], 'เมนบอร์ด': ['ซ่อมเมนบอร์ด', 'เปลี่ยน IC / อะไหล่บอร์ด'] },
     items: [
         { id: 'INV-S01', category: 'หน้าจอ', type: 'OR', model: 'iPhone 13 Pro', qty: 5, cost: 3200, price: 4500 },
         { id: 'INV-S02', category: 'หน้าจอ', type: 'TFT', model: 'iPhone 13 Pro', qty: 10, cost: 1100, price: 1800 },
@@ -679,7 +725,6 @@ const DEF_INV = {
         { id: 'INV-O01', category: 'แพรชาร์จ', type: 'ของแท้แกะเครื่อง', model: 'iPhone 12', qty: 8, cost: 350, price: 700 }
     ]
 };
-// เรียก Apps Script: มี timeout กันค้างเมื่อเซิร์ฟเวอร์ช้าผิดปกติ · การอ่าน (GET) ลองซ้ำอีก 1 ครั้งเมื่อหมดเวลา/ล้มเหลว (การเขียน POST ไม่ลองซ้ำเอง กันบันทึกซ้ำ)
 async function fetchJson(url, opts, ms, retries) {
     for (let i = 0; ; i++) {
         const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
@@ -690,27 +735,22 @@ async function fetchJson(url, opts, ms, retries) {
 }
 const post = p => fetchJson(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p) }, 40000, 0);
 const get = (q, token) => fetchJson(`${API_URL}?${q}&token=${encodeURIComponent(token)}`, null, 15000, 1);
-// ===== แชทเรียลไทม์ผ่าน Firebase Realtime Database (REST + EventSource ไม่ต้องติดตั้ง SDK) =====
-// ปล่อยว่าง = ปิดระบบนี้ (แชทไปทาง Google Sheet อย่างเดียว) · ใส่ URL ของ Realtime Database เช่น https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
-// ข้อความขึ้นห้องแชทสดทันที แล้วบันทึกลง Google Sheet เบื้องหลังเป็นประวัติถาวร (ถ้า Firebase ใช้ไม่ได้ จะส่งผ่าน Sheet ตามเดิม)
 const FIREBASE_URL = '';
 const FB = {
     on: () => !!FIREBASE_URL,
     url: (path, query) => FIREBASE_URL.replace(/\/+$/, '') + '/' + path + '.json' + (query || ''),
-    // รหัสห้องแชท: คำนวณจากรหัสเคส + เบอร์โทร (SHA-256) — เดาไม่ได้ถ้าไม่รู้ทั้งสองอย่าง และใครก็ดูรายชื่อห้องทั้งหมดไม่ได้
     async roomKey(id, phone) {
         try {
             const raw = 'omirim|' + String(id).toUpperCase() + '|' + String(phone == null ? '' : phone).replace(/\D/g, '');
             const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
             return 'r_' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
-        } catch (e) { return ''; }   // เบราว์เซอร์ไม่รองรับ → ปิดแชทสดของเคสนี้ ใช้ Sheet แทน
+        } catch (e) { return ''; }
     },
     async request(url, opts, ms) {
         const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms || 10000);
         try { return await fetch(url, { ...(opts || {}), signal: ctl.signal }); } finally { clearTimeout(timer); }
     },
     async get(path) { try { const r = await FB.request(FB.url(path)); return r.ok ? await r.json() : null; } catch (e) { return null; } },
-    // เขียนข้อความ (รหัสข้อความ = ชื่อคีย์ ส่งซ้ำจึงไม่เกิดข้อความซ้ำ) · ข้อความจากลูกค้าจะประกาศในช่องแจ้งเตือนของหลังบ้านด้วย
     async put(room, m) {
         try {
             const path = 'chats/' + room + '/msgs/' + m.id;
@@ -718,14 +758,13 @@ const FB = {
             if (m.from === 'customer') FB.request(FB.url('activity/feed/' + m.id), { method: 'PUT', body: JSON.stringify({ room, from: 'customer', at: m.at }) }).catch(() => null);
             const res = await msg;
             if (res.ok) return true;
-            if (res.status === 401) {   // อาจมีข้อความรหัสนี้อยู่แล้ว (เคยส่งถึงแต่คำตอบหลุด) → ถ้าเนื้อหาตรงกันนับว่าสำเร็จ
+            if (res.status === 401) {
                 const d = await FB.get(path);
                 if (d && d.text === m.text) return true;
             }
             return false;
         } catch (e) { return false; }
     },
-    // ฟังข้อมูลแบบสด (Server-Sent Events) → เรียก onData(ข้อมูลทั้งก้อน) ทุกครั้งที่เปลี่ยน · onStatus(true/false) = เชื่อมต่อได้/หลุด · คืนฟังก์ชันหยุดฟัง
     listen(path, query, onData, onStatus) {
         let state = null;
         const setAt = (parts, val) => {
@@ -741,26 +780,24 @@ const FB = {
                 if (merge) Object.keys(data || {}).forEach(k => setAt(parts.concat(k.split('/').filter(Boolean)), data[k]));
                 else setAt(parts, data);
                 onData(state && typeof state === 'object' ? state : {});
-            } catch (e) { /* ข้อมูลไม่สมบูรณ์ ข้ามไป */ }
+            } catch (e) {}
         };
         const es = new EventSource(FB.url(path, query));
         es.onopen = () => { if (onStatus) onStatus(true); };
-        es.onerror = () => { if (onStatus) onStatus(false); };   // EventSource ต่อใหม่เองอัตโนมัติ
+        es.onerror = () => { if (onStatus) onStatus(false); };
         es.addEventListener('put', ev => apply(ev, false));
         es.addEventListener('patch', ev => apply(ev, true));
         es.addEventListener('cancel', () => { es.close(); if (onStatus) onStatus(false); });
         return () => es.close();
     }
 };
-// รอบดึงเคสใหม่ (นับจากต้นรอบ · Apps Script ตอบ ~1.5-3 วินาที/ครั้ง): เร็วเมื่อมีคนใช้งาน · ช้ามากเมื่อไม่มีใครแตะหน้าจอเกิน 10 นาที
 const POLL_FAST_MS = 1500, POLL_IDLE_MS = 20000, IDLE_AFTER_MS = 10 * 60 * 1000;
 let lastActive = Date.now();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
-// ข้อความในเคส: messages = [{ id, from: 'admin'|'customer', text, at }] — เคสเก่าที่มีแค่ admin_note จะแสดงเป็นข้อความแรกจากร้าน
 const thread = c => {
     let m = c.messages;
     if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { m = []; } }
-    if (Array.isArray(m) && m.length) {   // ตัดข้อความซ้ำตามรหัส (กรณีกดส่งใหม่หลังเครือข่ายหลุดทั้งที่ข้อความถึงเซิร์ฟเวอร์แล้ว)
+    if (Array.isArray(m) && m.length) {
         const seen = new Set();
         return m.filter(x => { if (!x.id) return true; if (seen.has(x.id)) return false; seen.add(x.id); return true; });
     }
@@ -769,8 +806,8 @@ const thread = c => {
 const newMsgId = () => 'M-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
 const Store = {
     async list(token) {
-        if (API_URL) {   // ผิดพลาด = โยน error (ห้ามคืนรายการว่าง ไม่งั้นหน้าจอจะเหมือนเคสหายไปทั้งหมด)
-            const r = await get('action=list' + (Store._ver ? '&ver=' + encodeURIComponent(Store._ver) : ''), token);   // ส่งเวอร์ชันที่มี → ถ้าไม่เปลี่ยน เซิร์ฟเวอร์ตอบสั้นๆ ไม่ต้องส่งข้อมูลทั้งชุด
+        if (API_URL) {
+            const r = await get('action=list' + (Store._ver ? '&ver=' + encodeURIComponent(Store._ver) : ''), token);
             if (!r.ok) throw new Error(r.error || 'list failed');
             if (r.unchanged && Store._cache) return Store._cache;
             Store._ver = r.ver || ''; Store._cache = r.data || [];
@@ -785,13 +822,12 @@ const Store = {
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (c) c.status = status; localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // ส่งข้อความเข้าเคส (อ่านข้อมูลล่าสุดจากที่เก็บก่อนต่อท้าย เพื่อไม่ให้ข้อความที่ลูกค้าเพิ่งส่งมาหาย)
     async addMessage(id, msg, token) {
         if (API_URL) { const r = await post({action:'message', id, message:msg, token}); if (!r.ok) throw new Error('message failed'); return; }
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (!c) throw new Error('case not found');
         c.messages = thread(c).concat(msg);
-        if (msg.from === 'admin') { c.admin_note = msg.text; c.note_date = new Date(msg.at).toLocaleString('th-TH'); }   // คงช่อง admin_note ไว้ให้เข้ากับข้อมูลเดิม
+        if (msg.from === 'admin') { c.admin_note = msg.text; c.note_date = new Date(msg.at).toLocaleString('th-TH'); }
         localStorage.setItem(KEY, JSON.stringify(l));
     },
     async setOffers(id, offers, date, token) {
@@ -799,13 +835,11 @@ const Store = {
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (c) { c.offers = offers; c.offer_date = date; c.decision = ''; c.chosen = ''; c.decision_date = ''; } localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // ปิดงาน: ตั้งสถานะ เสร็จสิ้น + บันทึกใบเบิกสินค้า (requisition)
     async complete(id, req, token) {
         if (API_URL) return post({action:'complete', id, requisition:req, token});
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (c) { c.status = 'เสร็จสิ้น'; c.requisition = req; c.done_at = req.at; } localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // รับเครื่องแล้ว: บันทึกผู้รับเครื่อง (ชื่อหลังบ้าน) และเวลา
     async markReceived(id, by, date, token) {
         if (API_URL) { const r = await post({action:'received', id, by, date, token}); if (!r.ok) throw new Error('received failed'); return; }
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
@@ -813,7 +847,6 @@ const Store = {
         c.received_by = by; c.received_at = date;
         localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // ยกเลิกงานซ่อมโดยร้าน (ไม่ตัดสต็อกและไม่ออกใบเบิก · ใช้ไม่ได้กับเคสที่เสร็จสิ้นแล้ว)
     async cancel(id, date, token) {
         if (API_URL) { const r = await post({action:'cancel', by:'admin', id, date, token}); if (!r.ok) throw new Error('cancel failed'); return; }
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
@@ -821,7 +854,6 @@ const Store = {
         c.status = 'ยกเลิก'; c.cancel_by = 'admin'; c.cancel_date = date;
         localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // งานซ่อมเพิ่มระหว่างซ่อม: เก็บต่อท้ายรายการเดิม (ไม่ทับการตัดสินใจของลูกค้า)
     async addAddon(id, addon, token) {
         if (API_URL) { const r = await post({action:'addAddon', id, addon, token}); if (!r.ok) throw new Error('addAddon failed'); return; }
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
@@ -829,24 +861,20 @@ const Store = {
         c.addons = (c.addons || []).concat(addon);
         localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // ลบงานซ่อมเพิ่มที่ลูกค้ายังไม่ได้ตอบ
     async removeAddon(id, addonId, token) {
         if (API_URL) { const r = await post({action:'removeAddon', id, addonId, token}); if (!r.ok) throw new Error('removeAddon failed'); return; }
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (!c) throw new Error('case not found');
-        const a = (c.addons || []).find(x => x.id === addonId);
-        
         c.addons = (c.addons || []).filter(x => x.id !== addonId);
         localStorage.setItem(KEY, JSON.stringify(l));
     },
-    // บัญชี: field = 'acc_sale' | 'acc_cost' (ค่าว่าง = ใช้ค่าอัตโนมัติจากข้อเสนอที่ลูกค้าเลือก)
     async setAcc(id, field, value, token) {
         if (API_URL) return post({action:'acc', id, field, value, token});
         const l = JSON.parse(localStorage.getItem(KEY) || '[]'); const c = l.find(x => x.id === id);
         if (c) c[field] = value; localStorage.setItem(KEY, JSON.stringify(l));
     },
     async invLoad(token) {
-        if (API_URL) {   // ใช้สต็อกตัวอย่างเฉพาะเมื่อเซิร์ฟเวอร์ตอบว่า "ยังไม่มีข้อมูล" จริงๆ · ผิดพลาด = โยน error (ห้ามใช้ตัวอย่างแทน ไม่งั้นบันทึกครั้งต่อไปจะทับสต็อกจริง)
+        if (API_URL) {
             const r = await get('action=inv', token);
             if (!r.ok) throw new Error(r.error || 'inv failed');
             return r.data || DEF_INV;
@@ -858,14 +886,12 @@ const Store = {
         localStorage.setItem(INV_KEY, JSON.stringify(inv));
     }
 };
-// กล่องแชทต่อเคส: me = 'admin' | 'customer' · send(text) ต้องคืนค่า Promise<boolean> (false = ส่งไม่สำเร็จ จะคงข้อความที่พิมพ์ไว้)
 const ChatThread = {
     props: { msgs: { type: Array, default: () => [] }, me: String, send: Function, height: { type: String, default: 'h-64' }, room: { type: String, default: '' } },
     emits: ['live'],
     data() { return { text: '', pending: [], live: [] }; },
     computed: {
-        // ข้อความที่ยืนยันแล้ว + ข้อความที่กำลังส่ง (แสดงทันทีโดยไม่ต้องรอเซิร์ฟเวอร์) · ตัดข้อความซ้ำตามรหัส
-        shown() {   // ข้อความจาก Sheet + จากแชทสด + ที่กำลังส่ง · ตัดซ้ำตามรหัส · เรียงตามเวลา (ข้อความจากแชทสดอาจมาก่อนที่ Sheet จะบันทึก)
+        shown() {
             const seen = new Set(), list = [];
             const add = m => { if (m.id) { if (seen.has(m.id)) return; seen.add(m.id); } list.push(m); };
             this.msgs.forEach(add); this.live.forEach(add); this.pending.forEach(add);
@@ -885,33 +911,33 @@ const ChatThread = {
         toBottom() { this.$nextTick(() => { const el = this.$refs.box; if (el) el.scrollTop = el.scrollHeight; }); },
         fmt(at) { const d = new Date(at); return isNaN(d) ? String(at || '') : d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }); },
         who(m) { return m.from === 'admin' ? 'ร้าน' : (this.me === 'customer' ? 'คุณ' : 'ลูกค้า'); },
-        submit() {   // แสดงข้อความทันที แล้วส่งในพื้นหลัง (ไม่ต้องรอเซิร์ฟเวอร์ตอบ)
+        submit() {
             const t = this.text.trim(); if (!t) return;
             this.pending.push({ id: newMsgId(), from: this.me, text: t, at: new Date().toISOString(), state: 'sending' });
             this.text = '';
-            this.deliver(this.pending[this.pending.length - 1]);   // ใช้ตัวที่ผ่าน reactive แล้ว เพื่อให้สถานะอัปเดตบนหน้าจอ
+            this.deliver(this.pending[this.pending.length - 1]);
         },
-        deliver(p) {   // ส่งทีละข้อความตามลำดับ (กันข้อความสลับลำดับ)
+        deliver(p) {
             p.state = 'sending';
             this.chain = this.chain.then(async () => {
                 const sheet = () => Promise.resolve(this.send(p.text, p.id)).then(r => r !== false, () => false);
-                if (this.room && FB.on() && await FB.put(this.room, p)) {   // ช่องทางเร็ว: อีกฝั่งที่เปิดแชทอยู่เห็นภายใน ~1 วินาที
+                if (this.room && FB.on() && await FB.put(this.room, p)) {
                     p.state = 'sent';
-                    this.saveToSheet(sheet);   // แล้วบันทึกลง Sheet เบื้องหลัง (ประวัติถาวร)
+                    this.saveToSheet(sheet);
                 } else {
-                    p.state = (await sheet()) ? 'sent' : 'failed';   // ไม่ได้ตั้งค่า/ใช้ Firebase ไม่ได้ → ส่งผ่าน Sheet ตามเดิม
+                    p.state = (await sheet()) ? 'sent' : 'failed';
                 }
-                if (p.state === 'sent') setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);   // ข้อความจริงปรากฏแล้ว ล้างตัวชั่วคราวทิ้ง
+                if (p.state === 'sent') setTimeout(() => { this.pending = this.pending.filter(x => x !== p); }, 30000);
             });
         },
-        async saveToSheet(sheet) {   // บันทึกลง Sheet (ประวัติถาวร + ตัวบอก "ข้อความใหม่" ในหน้ารายการ) · ลองซ้ำเองถ้าล้มเหลว
+        async saveToSheet(sheet) {
             for (const delay of [0, 2000, 6000, 15000]) {
                 if (delay) await new Promise(r => setTimeout(r, delay));
                 if (await sheet()) return;
             }
-            console.warn('บันทึกข้อความลง Sheet ไม่สำเร็จ (ข้อความยังอยู่ในแชทสด)');
+            console.warn('บันทึกข้อความลง Sheet ไม่สำเร็จ');
         },
-        subscribe(room) {   // ฟังแชทสดของห้องนี้ (ไม่มีห้อง/ไม่ได้ตั้งค่า Firebase = ไม่ทำอะไร)
+        subscribe(room) {
             this.unsubscribe(); this.live = [];
             if (!room || !FB.on()) return;
             this.stop = FB.listen('chats/' + room + '/msgs', '', st => { this.live = Object.keys(st || {}).map(id => ({ id, ...st[id] })); });
@@ -933,8 +959,8 @@ const ChatThread = {
                 </div>
             </div>
             <div class="flex gap-2 mt-2">
-                <textarea v-model="text" @keydown.enter="onEnter" rows="2" maxlength="1000" placeholder="พิมพ์ข้อความ (Enter = ส่ง · Shift+Enter = ขึ้นบรรทัดใหม่)" class="flex-1 p-2 border rounded text-sm resize-none"></textarea>
-                <button @click="submit" :disabled="!text.trim()" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700 disabled:opacity-40" title="ส่งข้อความ"><i class="fas fa-paper-plane"></i></button>
+                <textarea v-model="text" @keydown.enter="onEnter" rows="2" maxlength="1000" placeholder="พิมพ์ข้อความ..." class="flex-1 min-w-0 p-2 border rounded text-sm resize-none"></textarea>
+                <button @click="submit" :disabled="!text.trim()" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700 disabled:opacity-40 shrink-0" title="ส่งข้อความ"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>`
 };
@@ -942,7 +968,7 @@ const { createApp } = Vue
 createApp({
     data() {
         return {
-            role: 'admin', currentView: 'admin-login', adminTab: 'dashboard',
+            role: 'admin', currentView: 'admin-login', adminTab: 'dashboard', mobileMenu: false,
             adminUser: '', adminPass: '', loginError: '', timer: null, invReady: false, lastSync: '', syncError: false,
             fbEnabled: FB.on(), fbOnline: false, rooms: {}, liveMsgs: {},
             cases: [], chatId: '', zoom: '',
@@ -951,6 +977,10 @@ createApp({
         }
     },
     computed: {
+        tabTitle() {
+            const map = { dashboard: 'แดชบอร์ด', received: 'เคสงานใหม่', process: 'กำลังดำเนินการ', inventory: 'คลังสินค้า', accounting: 'รายการบัญชี' };
+            return map[this.adminTab] || 'Admin System';
+        },
         statusSummary() {
             const total = this.cases.length;
             return STATUSES.filter(s => !s.hidden).map(s => {
@@ -960,23 +990,19 @@ createApp({
         },
         dashFiltered() {
             const l = this.statusFilter ? this.cases.filter(c => this.grp(c.status) === this.statusFilter) : this.cases;
-            return l.slice().reverse(); // เคสที่เข้าล่าสุดขึ้นก่อน
+            return l.slice().reverse();
         },
         dashCases() { return this.dashFiltered.slice(0, 10); },
-        // เคสในขั้นดำเนินการ (กำลังดำเนินการ + รออะไหล่ — รออะไหล่ยังต้องเห็นและกลับมาดำเนินการได้)
         processCases() { return this.cases.filter(c => c.status === 'กำลังดำเนินการ' || c.status === 'รออะไหล่'); },
         photoCase() { return this.photoId ? (this.cases.find(c => c.id === this.photoId) || null) : null; },
         receiptCase() { return this.receiptId ? (this.cases.find(c => c.id === this.receiptId) || null) : null; },
-        // เคสที่ข้อความล่าสุดมาจากลูกค้า = รอร้านตอบ
         awaitCases() { return this.cases.filter(c => this.awaiting(c)); },
         awaitCount() { return this.awaitCases.length; },
         chatCurrent() { return this.chatId ? (this.cases.find(c => c.id === this.chatId) || null) : null; },
-        // รายการบัญชี: เฉพาะงานที่เสร็จสิ้น — ยอดขาย/ต้นทุนมาจากข้อเสนอที่ลูกค้าเลือก (แก้ทับเองได้ที่ acc_sale / acc_cost)
         ledger() {
             const has = v => v !== undefined && v !== null && v !== '';
             return this.cases.filter(c => c.status === 'เสร็จสิ้น').map(c => {
                 const o = (c.offers || []).find(x => x.id === c.chosen), rq = c.requisition || null;
-                // รายการอะไหล่ของเคส = ใบเบิก ณ วันปิดงาน (ทุกชิ้นที่ลูกค้ารับ) · ใบเบิกรุ่นเก่าเก็บอะไหล่ชิ้นเดียวไว้ในตัวใบเบิก
                 const parts = rq ? (rq.parts || [rq]) : (o ? [o] : []);
                 const autoSale = parts.reduce((s, p) => s + (Number(p.price) || 0), 0), autoCost = parts.reduce((s, p) => s + (Number(p.cost) || 0), 0);
                 const sale = has(c.acc_sale) ? Number(c.acc_sale) : autoSale;
@@ -985,7 +1011,7 @@ createApp({
                          req: rq, at: rq ? rq.at : '', parts,
                          sale, cost, profit: sale - cost, margin: sale ? (sale - cost) / sale * 100 : 0,
                          unset: !parts.length && !has(c.acc_sale) };
-            }).sort((a, b) => (b.at || '').localeCompare(a.at || ''));   // ใบเบิกล่าสุดขึ้นก่อน เคสที่ไม่มีใบเบิกอยู่ท้าย
+            }).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
         },
         accTotals() {
             const l = this.ledger, sale = l.reduce((s, r) => s + r.sale, 0), cost = l.reduce((s, r) => s + r.cost, 0);
@@ -1000,13 +1026,13 @@ createApp({
         }
     },
     created() {
-        this.roomToCase = {};   // รหัสห้องแชท → รหัสเคส (ไม่ต้องเป็นข้อมูลที่หน้าจอติดตาม)
-        document.addEventListener('visibilitychange', () => { if (!document.hidden && this.currentView !== 'admin-login') this.load(); });   // สลับกลับมาที่แท็บนี้ → อัปเดตทันที
+        this.roomToCase = {};
+        document.addEventListener('visibilitychange', () => { if (!document.hidden && this.currentView !== 'admin-login') this.load(); });
     },
     methods: {
-        grp(st) { return st === 'รออะไหล่' ? 'กำลังดำเนินการ' : st; },   // แดชบอร์ดนับ "รออะไหล่" รวมใน "กำลังดำเนินการ"
+        selectTab(tab) { this.adminTab = tab; this.mobileMenu = false; },
+        grp(st) { return st === 'รออะไหล่' ? 'กำลังดำเนินการ' : st; },
         badge(st) { return (STATUSES.find(x => x.key === st) || {}).badge || 'bg-gray-100 text-gray-600'; },
-        // โหลดเคสจากร้านทีละคำขอ · ถ้ามีคำสั่งโหลดใหม่ระหว่างรอ (เช่น เพิ่งบันทึกข้อมูล) จะทิ้งผลเก่าแล้วโหลดใหม่ กันข้อมูลเก่าที่มาช้าทับข้อมูลใหม่
         load() {
             this.loadWanted = true;
             if (!this.loadP) this.loadP = this.loadLoop();
@@ -1018,14 +1044,14 @@ createApp({
                     this.loadWanted = false;
                     let list = null, err = null;
                     try { list = await Store.list(this.adminPass); } catch (e) { err = e; }
-                    if (this.loadWanted) continue;   // มีคำสั่งโหลดใหม่เข้ามาระหว่างรอ → ทิ้งผลนี้
-                    if (err) { console.error(err); this.syncError = true; }   // ผิดพลาด: คงรายการเดิมไว้ ไม่ล้างหน้าจอ
+                    if (this.loadWanted) continue;
+                    if (err) { console.error(err); this.syncError = true; }
                     else { this.cases = list.map(normCase); this.syncError = false; this.lastSync = new Date().toLocaleTimeString('th-TH'); this.ensureRooms(); }
-                    if (!this.invReady) { try { this.inv = await Store.invLoad(this.adminPass); this.invReady = true; } catch (e) { console.error(e); } }   // สต็อกโหลดไม่สำเร็จ → ลองใหม่ทุกรอบ
+                    if (!this.invReady) { try { this.inv = await Store.invLoad(this.adminPass); this.invReady = true; } catch (e) { console.error(e); } }
                 }
             } finally { this.loadP = null; }
         },
-        startPolling() {   // ดึงเคสใหม่จากหน้าบ้านเป็นรอบๆ — หยุดเมื่อแท็บถูกซ่อน · ไม่ยิงคำขอซ้อนกัน · นับเวลาจากต้นรอบ
+        startPolling() {
             clearTimeout(this.timer);
             const gen = this.pollGen = (this.pollGen || 0) + 1;
             const tick = async () => {
@@ -1042,23 +1068,23 @@ createApp({
             const staff = STAFF.find(s => s.username === this.adminUser && s.password === this.adminPass);
             if (staff) {
                 this.staffName = staff.name;
-                this.currentView = 'admin-layout'; this.adminTab = 'dashboard'; this.loginError = '';
+                this.currentView = 'admin-layout'; this.adminTab = 'dashboard'; this.loginError = ''; this.mobileMenu = false;
                 this.invReady = false;
-                await this.load();   // โหลดเคส + สต็อก
+                await this.load();
                 if (!this.invReady) this.showToast('โหลดคลังสินค้าไม่สำเร็จ กำลังลองใหม่อัตโนมัติ — ยังไม่ควรแก้ไขสต็อก');
                 this.startPolling();
                 this.startFeed();
             } else { this.loginError = 'Username หรือ Password ไม่ถูกต้อง!'; }
         },
-        logout() { this.stopFeed(); this.pollGen = (this.pollGen || 0) + 1; clearTimeout(this.timer); this.currentView = 'admin-login'; this.adminPass = ''; this.chatId = ''; },
+        logout() { this.stopFeed(); this.pollGen = (this.pollGen || 0) + 1; clearTimeout(this.timer); this.currentView = 'admin-login'; this.adminPass = ''; this.chatId = ''; this.mobileMenu = false; },
         async setStatus(c, status) { c.status = status; await Store.setStatus(c.id, status, this.adminPass); },
-        acceptCase(c) { this.setStatus(c, 'กำลังดำเนินการ'); this.adminTab = 'process'; },
+        acceptCase(c) { this.setStatus(c, 'กำลังดำเนินการ'); this.selectTab('process'); },
         photos(c) {
             const a = Array.isArray(c.photos) ? c.photos : String(c.photos || '').split(',').filter(Boolean);
             return a.map(p => p.startsWith('data:') ? p : `https://drive.google.com/thumbnail?id=${p}&sz=w1200`);
         },
-        stockCheck(c, all) {   // all = true: แสดงทุกหมวด (ใช้กับงานซ่อมเพิ่ม)
-            const picked = [...new Set(String(c.problem || '').split(/\s*,\s*/).map(x => PROBLEM_CAT[x]).filter(Boolean))];   // ลูกค้าเลือกอาการได้หลายข้อ
+        stockCheck(c, all) {
+            const picked = [...new Set(String(c.problem || '').split(/\s*,\s*/).map(x => PROBLEM_CAT[x]).filter(Boolean))];
             const cats = (!all && picked.length) ? picked : Object.keys(this.inv.categories);
             return cats.map(k => !this.inv.categories[k] ? { category: k, missing: true, types: [] } : ({
                 category: k,
@@ -1066,7 +1092,6 @@ createApp({
             }));
         },
         baht(n) { return '฿ ' + Number(n || 0).toLocaleString('th-TH'); },
-        // ----- ใบเสร็จ / รับเครื่อง / การรับประกัน (ให้ตรงกับหน้าบ้าน) -----
         warranty(cat, type) { return warrantyDays(cat, type); },
         doneAt(c) { return c.done_at || (c.requisition && c.requisition.at) || ''; },
         itemsOf(c) {
@@ -1075,7 +1100,6 @@ createApp({
             return [...(o ? [{ ...o, kind: 'main' }] : []), ...(c.addons || []).filter(a => a.decision === 'accept').map(a => ({ ...a, kind: 'addon' }))];
         },
         totalOf(c) { return this.itemsOf(c).reduce((s, x) => s + (Number(x.price) || 0), 0); },
-        // ใบเสร็จ: อะไหล่หลักแต่ละชิ้นเป็น 1 บรรทัด · งานซ่อมเพิ่มเติมทั้งหมดคิดเป็น "รายการเดียว" (ยอดรวม) และแสดงรายการย่อยพร้อมรับประกัน
         billLines(c) {
             const row = x => ({ key: x.id, title: x.category + ' · ' + x.type, model: x.model, price: Number(x.price) || 0, warranty: this.warranty(x.category, x.type) });
             const items = this.itemsOf(c);
@@ -1088,50 +1112,47 @@ createApp({
         warrantyEnd(iso, days) { const d = new Date(iso); if (isNaN(d)) return '-'; d.setDate(d.getDate() + days); return d.toLocaleDateString('th-TH', { dateStyle: 'medium' }); },
         warrantyText(days, c) { const done = this.doneAt(c); return days + ' วัน' + (done ? ' (ถึงวันที่ ' + this.warrantyEnd(done, days) + ')' : ''); },
         deliveryLabel(c) { return c.delivery_method === 'ship' ? 'ส่งทางไปรษณีย์/ขนส่ง' : (c.delivery_method === 'walkin' ? 'นำมาหน้าร้านเอง' : 'ยังไม่ระบุ'); },
-        // รับเครื่องแล้ว: บันทึกชื่อผู้รับเครื่อง (หลังบ้านที่ล็อกอินอยู่) และเวลา
-        async markReceived(c) {   // ลูกค้าเลือกวิธีส่งเครื่องแล้ว → ร้านกดรับเครื่อง (บันทึกชื่อผู้ใช้หลังบ้านที่รับ) · แสดงผลทันที แล้วบันทึกเบื้องหลัง
+        async markReceived(c) {
             if (!confirm(`ยืนยันว่ารับเครื่องเคส ${c.id} แล้ว?\nผู้รับเครื่อง: ${this.staffName}`)) return;
             const when = new Date().toLocaleString('th-TH');
             c.received_by = this.staffName; c.received_at = when;
             try { await Store.markReceived(c.id, this.staffName, when, this.adminPass); this.showToast(`บันทึกรับเครื่องเคส ${c.id} แล้ว (ผู้รับ: ${this.staffName})`); this.load(); }
             catch (e) { c.received_by = ''; c.received_at = ''; alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
         },
-        async unmarkReceived(c) {   // กดรับเครื่องผิด → ยกเลิกสถานะ
+        async unmarkReceived(c) {
             if (!confirm(`ยกเลิกสถานะ "รับเครื่องแล้ว" ของเคส ${c.id} ?`)) return;
             const prev = [c.received_by, c.received_at]; c.received_by = ''; c.received_at = '';
             try { await Store.markReceived(c.id, '', '', this.adminPass); this.load(); }
             catch (e) { [c.received_by, c.received_at] = prev; alert('ยกเลิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
         },
-        printReceipt() {   // พิมพ์เฉพาะใบเสร็จ (เหมือนการพิมพ์ใบเบิก)
+        printReceipt() {
             document.body.classList.add('print-receipt-mode');
             try { window.print(); } finally { document.body.classList.remove('print-receipt-mode'); }
         },
-        // ----- งานซ่อมเพิ่มเติม (ระหว่างซ่อม) -----
-        addonVal(c, cat, type, field) {   // ค่าที่กรอกไว้ของงานเพิ่ม field = 'price' | 'cost' (ถ้ายังไม่กรอกใช้ค่าในคลังของรุ่นนั้น)
+        addonVal(c, cat, type, field) {
             const k = [c.id, cat, type, field].join('|');
             if (k in this.addonInputs) return this.addonInputs[k];
             const i = this.inv.items.find(x => x.model === c.model && x.category === cat && x.type === type && x[field]);
             return i ? i[field] : '';
         },
         setAddonVal(c, cat, type, field, v) { this.addonInputs[[c.id, cat, type, field].join('|')] = v === '' ? '' : Math.max(0, Number(v) || 0); },
-        async addAddon(c, cat, type) {   // เสนองานซ่อมเพิ่มให้ลูกค้า (ไม่ทับข้อเสนอหลักและการตัดสินใจเดิมของลูกค้า)
+        async addAddon(c, cat, type) {
             const price = Number(this.addonVal(c, cat, type, 'price')) || 0;
             if (!price) { alert('กรุณาใส่ราคาขายของ "' + type + '" ก่อนกดเสนอ'); return; }
             const cost = Number(this.addonVal(c, cat, type, 'cost')) || 0;
             if (!confirm(`เพิ่ม "${cat} · ${type}" ราคา ${this.baht(price)} เข้าบิลของเคสนี้?`)) return;
-            const a = { id: 'A-' + Date.now().toString(36).slice(-5).toUpperCase(), category: cat, type, model: c.model, price, cost, decision: 'accept', decision_date: new Date().toLocaleString('th-TH'), offer_date: new Date().toLocaleString('th-TH'), by_admin: true };   // ร้านเพิ่มเอง = เข้าบิลทันที
-            c.addons = (c.addons || []).concat(a);   // เข้าบิลทันที แล้วบันทึกเบื้องหลัง
+            const a = { id: 'A-' + Date.now().toString(36).slice(-5).toUpperCase(), category: cat, type, model: c.model, price, cost, decision: 'accept', decision_date: new Date().toLocaleString('th-TH'), offer_date: new Date().toLocaleString('th-TH'), by_admin: true };
+            c.addons = (c.addons || []).concat(a);
             try { await Store.addAddon(c.id, a, this.adminPass); } catch (e) { c.addons = (c.addons || []).filter(x => x.id !== a.id); alert('เพิ่มรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); return; }
             this.load();
             this.showToast(`เพิ่มงานซ่อมเพิ่ม "${type}" เข้าบิลแล้ว`);
         },
-        async removeAddon(c, a) {   // ลบข้อเสนองานเพิ่มที่ลูกค้ายังไม่ได้ตอบ
+        async removeAddon(c, a) {
             if (!confirm('ลบรายการงานซ่อมเพิ่มนี้ออกจากบิล?')) return;
             const keep = c.addons; c.addons = (c.addons || []).filter(x => x.id !== a.id);
             try { await Store.removeAddon(c.id, a.id, this.adminPass); } catch (e) { c.addons = keep; alert('ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
             this.load();
         },
-        // ----- ยกเลิกงานซ่อม (ร้านเป็นผู้ยกเลิก: ไม่ตัดสต็อกและไม่ออกใบเบิก) -----
         async cancelCase(c) {
             if (!confirm(`ยืนยันยกเลิกงานซ่อมเคส ${c.id} ?\nเคสจะถูกปิด ไม่ตัดสต็อกและไม่ออกใบเบิก`)) return;
             try { await Store.cancel(c.id, new Date().toLocaleString('th-TH'), this.adminPass); }
@@ -1139,8 +1160,6 @@ createApp({
             await this.load();
             this.showToast(`ยกเลิกงานซ่อมเคส ${c.id} แล้ว`);
         },
-        // ----- เสนอสินค้า/ราคาให้ลูกค้า (ใช้ร่าง offerDrafts เพื่อไม่ให้ถูกทับตอนดึงข้อมูลใหม่ทุก 4 วินาที) -----
-        // ราคาที่แอดมินกรอกต่อประเภท (ถ้ายังไม่กรอก ใช้ราคาในคลังของรุ่นนั้นเป็นค่าตั้งต้น ถ้าไม่มีให้ว่าง)
         typePrice(c, cat, type) {
             const k = [c.id, cat, type].join('|');
             if (k in this.typePrices) return this.typePrices[k];
@@ -1169,7 +1188,7 @@ createApp({
         },
         setOfferPrice(c, idx, v) { this.getDraft(c)[idx].price = Math.max(0, Number(v) || 0); },
         setOfferCost(c, idx, v) { this.getDraft(c)[idx].cost = Math.max(0, Number(v) || 0); },
-        fmtDT(iso) {   // วัน-เวลา แบบไทย เช่น 19 พ.ย. 2569 14:35
+        fmtDT(iso) {
             const d = new Date(iso);
             return isNaN(d) ? String(iso || '-') : d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
         },
@@ -1178,11 +1197,10 @@ createApp({
             document.body.classList.add('print-slip-mode');
             try { window.print(); } finally { document.body.classList.remove('print-slip-mode'); }
         },
-        // ซ่อมเสร็จ: ตัดสต็อกอะไหล่ทุกชิ้นที่ลูกค้ารับ (ชิ้นหลัก + งานซ่อมเพิ่มที่รับแล้ว ชิ้นละ 1) + ออกใบเบิกสินค้า (แสดงที่หน้า รายการบัญชี)
         async completeCase(c0) {
-            await this.load();   // ดึงข้อมูลล่าสุดก่อน (ลูกค้าอาจเพิ่งกดรับ/ไม่รับงานซ่อมเพิ่ม)
+            await this.load();
             const c = this.cases.find(x => x.id === c0.id) || c0;
-            if (c.requisition) { await this.setStatus(c, 'เสร็จสิ้น'); return; }   // เคยออกใบเบิกแล้ว ไม่ตัดสต็อกซ้ำ
+            if (c.requisition) { await this.setStatus(c, 'เสร็จสิ้น'); return; }
             const o = (c.offers || []).find(x => x.id === c.chosen);
             const picks = [...(o ? [{ ...o, kind: 'main' }] : []), ...(c.addons || []).filter(a => a.decision === 'accept').map(a => ({ ...a, kind: 'addon' }))];
             if (!picks.length) {
@@ -1207,7 +1225,7 @@ createApp({
             await Store.complete(c.id, req, this.adminPass);
             this.showToast(`ออกใบเบิก ${req.id} แล้ว · ` + parts.map(p => `${p.type}: ` + (p.stock_cut ? `ตัดสต็อก ${p.stock_before} → ${p.stock_after}` : p.note)).join(' / ') + ' (ดูที่ "5. รายการบัญชี")');
         },
-        async accSet(c, field, v) {   // แก้ยอดขาย/ต้นทุนในหน้าบัญชี (ล้างช่อง = กลับไปใช้ค่าอัตโนมัติ)
+        async accSet(c, field, v) {
             c[field] = v === '' ? '' : Math.max(0, Number(v) || 0);
             await Store.setAcc(c.id, field, c[field], this.adminPass);
         },
@@ -1222,8 +1240,7 @@ createApp({
             delete this.offerDrafts[c.id];
             await Store.setOffers(c.id, c.offers, c.offer_date, this.adminPass);
         },
-        // ----- ข้อความกับลูกค้า -----
-        msgs(c) {   // ข้อความจาก Sheet + ที่มาทางแชทสด (ตัดซ้ำตามรหัส · เรียงตามเวลา)
+        msgs(c) {
             const base = thread(c), live = this.liveMsgs[c.id];
             if (!live || !live.length) return base;
             const ids = new Set(base.map(x => x.id)), extra = live.filter(x => !ids.has(x.id));
@@ -1232,11 +1249,11 @@ createApp({
             return base.concat(extra).sort((a, b) => { const x = t(a), y = t(b); return isNaN(x) || isNaN(y) ? 0 : x - y; });
         },
         awaiting(c) { const t = this.msgs(c); return t.length > 0 && t[t.length - 1].from === 'customer'; },
-        mergeLive(caseId, list) {   // รับข้อความจากแชทสด (ห้องที่เปิดอยู่ หรือช่องแจ้งเตือน) มารวมกับข้อความของเคส
+        mergeLive(caseId, list) {
             const cur = this.liveMsgs[caseId] || [], ids = new Set(cur.map(x => x.id)), add = (list || []).filter(x => x && !ids.has(x.id));
             if (add.length) this.liveMsgs[caseId] = cur.concat(add);
         },
-        async ensureRooms() {   // คำนวณรหัสห้องแชทของทุกเคส (ใช้ต่อกับแชทสด)
+        async ensureRooms() {
             if (!FB.on()) return;
             for (const c of this.cases) {
                 if (this.rooms[c.id]) continue;
@@ -1244,7 +1261,6 @@ createApp({
                 if (r) { this.rooms[c.id] = r; this.roomToCase[r] = c.id; }
             }
         },
-        // ช่องแจ้งเตือนแชทสด: ลูกค้าส่งข้อความเมื่อไหร่ หลังบ้านเห็นทันที (ไม่ต้องรอ Sheet) แม้ไม่ได้เปิดห้องแชทนั้นอยู่
         startFeed() {
             this.stopFeed();
             if (!FB.on()) return;
@@ -1254,11 +1270,11 @@ createApp({
         stopFeed() { if (this.feedStop) { this.feedStop(); this.feedStop = null; } this.fbOnline = false; },
         onFeed(st) {
             const keys = Object.keys(st || {});
-            if (!this.feedSeen) { this.feedSeen = new Set(keys); return; }   // ครั้งแรก = ของเก่า ไม่แจ้งเตือน
+            if (!this.feedSeen) { this.feedSeen = new Set(keys); return; }
             keys.filter(k => !this.feedSeen.has(k)).forEach(k => { this.feedSeen.add(k); this.fetchFeedMessage(k, st[k]); });
         },
         async fetchFeedMessage(mid, e) {
-            if (!this.roomToCase[e.room]) { await this.load(); await this.ensureRooms(); }   // เคสใหม่ที่ยังไม่รู้จัก → โหลดรายการก่อน
+            if (!this.roomToCase[e.room]) { await this.load(); await this.ensureRooms(); }
             const caseId = this.roomToCase[e.room];
             if (!caseId) return;
             let m = null;
@@ -1269,11 +1285,11 @@ createApp({
             this.showToast('ข้อความใหม่จาก ' + ((c && (c.name || c.id)) || caseId) + ': ' + String(m.text).slice(0, 60));
         },
         openChat(c) { this.chatId = c.id; },
-        async sendMsg(c, text, id) {   // คืน false = ส่งไม่สำเร็จ (กล่องแชทจะขึ้น "ส่งไม่สำเร็จ · ส่งใหม่" ให้เอง) · id = รหัสข้อความที่กล่องแชทแสดงไว้ทันทีแล้ว
+        async sendMsg(c, text, id) {
             const t = String(text || '').trim(); if (!t) return false;
             try { await Store.addMessage(c.id, { id: id || newMsgId(), from: 'admin', text: t, at: new Date().toISOString() }, this.adminPass); }
             catch (e) { return false; }
-            this.load();   // ดึงข้อความจริงมาแทนตัวชั่วคราว (ไม่ต้องรอ)
+            this.load();
             return true;
         },
         saveInv() {
